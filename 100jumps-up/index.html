@@ -4,83 +4,116 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>100 Jumps Up</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;800&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      background: #0a0a14;
+      background: #05050f;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
+      width: 100vw;
       height: 100vh;
-      font-family: 'Courier New', monospace;
-      user-select: none;
       overflow: hidden;
+      font-family: 'Space Grotesk', 'Courier New', monospace;
+      touch-action: none;
     }
+
+    #wrap {
+      position: relative;
+      /* scaled via JS to fit viewport */
+    }
+
     canvas {
       display: block;
-      box-shadow: 0 0 60px rgba(100, 120, 255, 0.2);
+      image-rendering: pixelated;
     }
-    #hint {
-      color: #444;
-      font-size: 12px;
-      margin-top: 10px;
-      letter-spacing: 1px;
+
+    /* Mobile tap overlay */
+    #tap {
+      position: absolute;
+      inset: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
     }
   </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
-<div id="hint">HOLD SPACE to charge power · RELEASE to jump</div>
+
+<div id="wrap">
+  <canvas id="canvas"></canvas>
+  <div id="tap"></div>
+</div>
 
 <script>
-// ─── Constants ────────────────────────────────────────────────────────────────
-const W = 420, H = 600;
-const GRAVITY         = 0.38;
-const PLAYER_SIZE     = 28;
-const PLAT_H          = 14;
-const TARGET_JUMPS    = 100;
-const MAX_CHARGE_MS   = 1800;
-const VERT_GAP_BASE   = 130;   // vertical distance between platforms
-const CAM_PLAYER_Y    = H * 0.65; // player's screen Y position (camera target)
-
-// Difficulty scaling
-const OFFSET_BASE  = 70;   // horizontal offset at jump 0
-const OFFSET_GROW  = 1.4;  // pixels per jump
-const OFFSET_MAX   = 180;
-const WIDTH_BASE   = 130;
-const WIDTH_SHRINK = 0.6;
-const WIDTH_MIN    = 55;
-
-// ─── Canvas ───────────────────────────────────────────────────────────────────
+// ─── Canvas & scaling ────────────────────────────────────────────────────────
+const CW = 420, CH = 640;  // logical resolution
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
-canvas.width  = W;
-canvas.height = H;
+const wrap   = document.getElementById('wrap');
+canvas.width  = CW;
+canvas.height = CH;
 
-// ─── Game state ───────────────────────────────────────────────────────────────
-let state;      // 'idle' | 'charging' | 'jumping' | 'scrolling' | 'dead' | 'win'
-let player;
-let platforms;
-let score;
-let charge;
-let chargeStart;
-let spaceHeld;
-let cameraY;    // world Y that maps to canvas top (lower = looking further up)
-let targetCamY;
-let particles;
-let shakeAmt;
-let bestScore = 0;
-let jumpDir;    // current jump direction: +1 right, -1 left
-
-// ─── Setup ────────────────────────────────────────────────────────────────────
-function platformWidth(idx) {
-  return Math.max(WIDTH_MIN, WIDTH_BASE - idx * WIDTH_SHRINK);
+function resize() {
+  const scale = Math.min(window.innerWidth / CW, window.innerHeight / CH, 2);
+  wrap.style.width  = `${CW * scale}px`;
+  wrap.style.height = `${CH * scale}px`;
+  canvas.style.width  = `${CW * scale}px`;
+  canvas.style.height = `${CH * scale}px`;
 }
-function platformOffset(idx) {
-  return Math.min(OFFSET_MAX, OFFSET_BASE + idx * OFFSET_GROW);
+window.addEventListener('resize', resize);
+resize();
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+const W = CW, H = CH;
+const GRAVITY       = 0.38;
+const PLAYER_SIZE   = 28;
+const PLAT_H        = 14;
+const TARGET_JUMPS  = 100;
+const MAX_CHARGE_MS = 1800;
+const VERT_GAP_BASE = 135;
+const CAM_PLAYER_Y  = H * 0.65;
+
+// Difficulty scaling
+const OFFSET_BASE   = 68;
+const OFFSET_GROW   = 1.5;
+const OFFSET_MAX    = 185;
+const WIDTH_BASE    = 132;
+const WIDTH_SHRINK  = 0.65;
+const WIDTH_MIN     = 52;
+
+// ─── State ───────────────────────────────────────────────────────────────────
+// states: 'intro' | 'idle' | 'charging' | 'jumping' | 'dead' | 'win'
+let state, player, platforms, score, charge, chargeStart;
+let spaceHeld, cameraY, particles, shakeAmt, bestScore = 0;
+let introAnim = 0; // for intro screen animation
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const platWidth  = i => Math.max(WIDTH_MIN,  WIDTH_BASE  - i * WIDTH_SHRINK);
+const platOffset = i => Math.min(OFFSET_MAX, OFFSET_BASE + i * OFFSET_GROW);
+const wy         = worldY => worldY - cameraY;
+const lerp       = (a, b, t) => a + (b - a) * t;
+
+function rand(min, max) { return min + Math.random() * (max - min); }
+
+// ─── Platform generation ─────────────────────────────────────────────────────
+function addNextPlatform() {
+  const last    = platforms[platforms.length - 1];
+  const idx     = platforms.length;
+  const safeIdx = Math.min(idx + score, 85);
+  const dir     = idx % 2 === 1 ? 1 : -1;
+  const offset  = platOffset(safeIdx);
+  const w       = platWidth(safeIdx);
+  const vertGap = VERT_GAP_BASE + rand(0, 25);
+  const lastCx  = last.x + last.w / 2;
+  let newCx     = lastCx + dir * offset;
+  newCx = Math.max(w / 2 + 18, Math.min(W - w / 2 - 18, newCx));
+  platforms.push({ x: newCx - w / 2, y: last.y - vertGap, w, h: PLAT_H, dir });
 }
 
+// ─── Reset / init ────────────────────────────────────────────────────────────
 function reset() {
   state      = 'idle';
   charge     = 0;
@@ -89,123 +122,78 @@ function reset() {
   score      = 0;
   particles  = [];
   shakeAmt   = 0;
-  jumpDir    = 1; // first jump goes right
 
-  // Starting platform: wide, centered, near bottom of world
-  const startW  = 180;
-  const startX  = W / 2 - startW / 2;
-  const startY  = 1200; // world Y (high number = lower visually)
+  const startW = 180, startX = W / 2 - 90, startY = 1400;
   platforms = [{ x: startX, y: startY, w: startW, h: PLAT_H, dir: null }];
+  for (let i = 0; i < 9; i++) addNextPlatform();
 
-  // Pre-generate platforms upward
-  for (let i = 0; i < 8; i++) addNextPlatform();
-
-  // Player on start platform
-  player = {
-    x: W / 2 - PLAYER_SIZE / 2,
-    y: startY - PLAYER_SIZE,
-    vx: 0, vy: 0,
-  };
-
-  // Camera: world Y at canvas top
-  cameraY   = player.y - CAM_PLAYER_Y;
-  targetCamY = cameraY;
+  player  = { x: W / 2 - PLAYER_SIZE / 2, y: startY - PLAYER_SIZE, vx: 0, vy: 0 };
+  cameraY = player.y - CAM_PLAYER_Y;
 }
 
-function addNextPlatform() {
-  const last  = platforms[platforms.length - 1];
-  const idx   = platforms.length; // approximately the jump index
-  const safeIdx = Math.min(idx + score, 80);
-
-  const dir    = platforms.length % 2 === 1 ? 1 : -1; // alternating starting with right
-  const offset = platformOffset(safeIdx);
-  const w      = platformWidth(safeIdx);
-  const vertGap = VERT_GAP_BASE + Math.random() * 30;
-
-  // Center of last platform → offset by direction
-  const lastCx = last.x + last.w / 2;
-  let newCx    = lastCx + dir * offset;
-
-  // Clamp so platform stays on screen
-  newCx = Math.max(w / 2 + 15, Math.min(W - w / 2 - 15, newCx));
-
-  platforms.push({
-    x: newCx - w / 2,
-    y: last.y - vertGap,
-    w,
-    h: PLAT_H,
-    dir, // the direction the player must jump to reach it
-  });
-}
-
-// ─── Input ────────────────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.code !== 'Space') return;
-  e.preventDefault();
-
+// ─── Input ───────────────────────────────────────────────────────────────────
+function onPress() {
+  if (state === 'intro')            { reset(); return; }
   if (state === 'dead' || state === 'win') { reset(); return; }
   if (state === 'idle' && !spaceHeld) {
-    state      = 'charging';
+    state       = 'charging';
     chargeStart = performance.now();
-    spaceHeld  = true;
+    spaceHeld   = true;
   }
-});
-
-document.addEventListener('keyup', e => {
-  if (e.code !== 'Space') return;
-  spaceHeld = false;
-
-  if (state === 'charging') {
-    const power = Math.max(0.05, charge);
-
-    // Direction is fixed by next platform
-    const nextPlat = getNextPlatform();
-    const dir = nextPlat ? nextPlat.dir : jumpDir;
-
-    // Power controls both horizontal distance AND height proportionally
-    player.vx = dir * (1.8 + power * 7.5);
-    player.vy = -(3.5 + power * 11);
-
-    state  = 'jumping';
-    charge = 0;
-  }
-});
-
-function getNextPlatform() {
-  // The platform directly above the current one the player is on
-  // = first platform whose top is above the player's feet
-  return platforms.find(p => p.y < player.y - PLAYER_SIZE * 0.5 && p.dir !== null);
 }
 
-// ─── Particles ────────────────────────────────────────────────────────────────
-function spawnLandParticles(x, y) {
-  for (let i = 0; i < 14; i++) {
-    const angle = (Math.random() * Math.PI) + Math.PI; // downward spread
-    const speed = 1 + Math.random() * 3.5;
+function onRelease() {
+  spaceHeld = false;
+  if (state !== 'charging') return;
+
+  const power   = Math.max(0.05, charge);
+  const next    = getNextPlatform();
+  const dir     = next ? next.dir : 1;
+  player.vx     = dir * (1.8 + power * 7.5);
+  player.vy     = -(3.5 + power * 11);
+  state         = 'jumping';
+  charge        = 0;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); onPress(); }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') onRelease();
+});
+
+// Touch / click
+const tapEl = document.getElementById('tap');
+tapEl.addEventListener('pointerdown', e => { e.preventDefault(); onPress(); });
+tapEl.addEventListener('pointerup',   e => { e.preventDefault(); onRelease(); });
+
+// ─── Game logic ───────────────────────────────────────────────────────────────
+function getNextPlatform() {
+  return platforms.find(p => p.dir !== null && p.y < player.y - PLAYER_SIZE * 0.4);
+}
+
+function spawnParticles(x, y) {
+  for (let i = 0; i < 16; i++) {
+    const angle = Math.PI + rand(-0.6, 0.6) * Math.PI;
+    const speed = rand(1, 4);
     particles.push({
       x, y,
       vx: Math.cos(angle) * speed,
-      vy: -1 + Math.sin(angle) * speed,
+      vy: Math.sin(angle) * speed - 1.5,
       life: 1,
-      decay: 0.035 + Math.random() * 0.04,
-      size: 2 + Math.random() * 5,
-      hue: 220 + Math.random() * 60,
+      decay: rand(0.03, 0.06),
+      size: rand(2, 5),
+      hue: rand(210, 270),
     });
   }
 }
 
-function updateParticles() {
-  for (const p of particles) {
-    p.x   += p.vx;
-    p.y   += p.vy;
-    p.vy  += 0.12;
-    p.life -= p.decay;
-  }
-  particles = particles.filter(p => p.life > 0);
-}
-
-// ─── Update ───────────────────────────────────────────────────────────────────
 function update(now) {
+  if (state === 'intro') {
+    introAnim = now;
+    return;
+  }
+
   if (state === 'charging') {
     charge = Math.min((now - chargeStart) / MAX_CHARGE_MS, 1);
   }
@@ -215,369 +203,454 @@ function update(now) {
     player.x  += player.vx;
     player.y  += player.vy;
 
-    // Platform collision: land on top (falling or moving upward just past it)
-    for (const p of platforms) {
-      if (p.dir === null) continue; // skip starting platform once left
-      const bottom     = player.y + PLAYER_SIZE;
-      const prevBottom = bottom - player.vy;
+    if (player.vy > 0) {
+      for (const p of platforms) {
+        if (p.dir === null) continue;
+        const bottom     = player.y + PLAYER_SIZE;
+        const prevBottom = bottom - player.vy;
+        if (
+          player.x + PLAYER_SIZE > p.x + 3 &&
+          player.x               < p.x + p.w - 3 &&
+          prevBottom <= p.y + 5  &&
+          bottom     >= p.y
+        ) {
+          player.y  = p.y - PLAYER_SIZE;
+          player.vx = 0; player.vy = 0;
+          score++;
+          spawnParticles(player.x + PLAYER_SIZE / 2, p.y);
+          shakeAmt = 5;
+          p.dir = null;
 
-      if (
-        player.x + PLAYER_SIZE > p.x + 3 &&
-        player.x              < p.x + p.w - 3 &&
-        prevBottom <= p.y + 4 &&
-        bottom     >= p.y &&
-        player.vy  > 0
-      ) {
-        // Landed!
-        player.y  = p.y - PLAYER_SIZE;
-        player.vx = 0;
-        player.vy = 0;
-        score++;
-        spawnLandParticles(player.x + PLAYER_SIZE / 2, p.y);
-        shakeAmt = 5;
-
-        // Mark this platform so we don't collide with it again
-        p.dir = null;
-
-        if (score >= TARGET_JUMPS) {
-          state = 'win';
-          if (score > bestScore) bestScore = score;
-        } else {
-          state = 'idle';
-          // Ensure enough platforms ahead
-          while (platforms.length < 10) addNextPlatform();
+          if (score >= TARGET_JUMPS) {
+            state = 'win';
+            if (score > bestScore) bestScore = score;
+          } else {
+            state = 'idle';
+            while (platforms.length < 11) addNextPlatform();
+          }
+          break;
         }
-        break;
       }
     }
 
-    // Death: fell below camera bottom + buffer
-    if (player.y > cameraY + H + 120) {
-      if (score > bestScore) bestScore = score;
-      state = 'dead';
-    }
-    // Death: went off left or right
-    if (player.x + PLAYER_SIZE < -20 || player.x > W + 20) {
+    if (player.y > cameraY + H + 140 ||
+        player.x + PLAYER_SIZE < -30 ||
+        player.x > W + 30) {
       if (score > bestScore) bestScore = score;
       state = 'dead';
     }
   }
 
-  // Camera: smoothly follow player upward (never go down)
-  targetCamY = player.y - CAM_PLAYER_Y;
-  if (state === 'jumping' || state === 'idle' || state === 'charging') {
-    if (targetCamY < cameraY) {
-      cameraY += (targetCamY - cameraY) * 0.08;
-    }
+  // Camera: follow player upward only
+  const targetCam = player.y - CAM_PLAYER_Y;
+  if (targetCam < cameraY) cameraY = lerp(cameraY, targetCam, 0.09);
+
+  // Cull & generate
+  platforms = platforms.filter(p => p.y < cameraY + H + 250);
+  while (platforms.length < 11) addNextPlatform();
+
+  // Particles
+  for (const p of particles) {
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.12; p.life -= p.decay;
   }
+  particles = particles.filter(p => p.life > 0);
 
-  // Cull platforms far below camera
-  platforms = platforms.filter(p => p.y < cameraY + H + 200);
-  // Keep enough platforms ahead
-  while (platforms.length < 10) addNextPlatform();
-
-  if (shakeAmt > 0) shakeAmt *= 0.72;
-  updateParticles();
+  if (shakeAmt > 0) shakeAmt *= 0.7;
 }
 
-// ─── World → Screen coordinate ────────────────────────────────────────────────
-function wy(worldY) { return worldY - cameraY; }
+// ─── Draw helpers ────────────────────────────────────────────────────────────
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+}
 
-// ─── Render ───────────────────────────────────────────────────────────────────
-function drawBackground() {
+// ─── Render ──────────────────────────────────────────────────────────────────
+function drawBg() {
+  // Deep space gradient
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#0a0a22');
-  grad.addColorStop(1, '#12122a');
+  grad.addColorStop(0, '#05050f');
+  grad.addColorStop(1, '#0d0d22');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Stars (static based on world position)
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  for (let i = 0; i < 60; i++) {
-    const sx = ((i * 137.5 + 23) % W);
-    const sy = ((i * 97.3 + 11) % 3000);
-    const screenY = sy - (cameraY % 3000);
-    const size = i % 5 === 0 ? 2 : 1;
-    ctx.fillRect(sx, ((screenY % H) + H) % H, size, size);
+  // Parallax stars — two layers
+  const t = (state === 'intro') ? 0 : cameraY;
+  for (let layer = 0; layer < 2; layer++) {
+    const count  = layer === 0 ? 55 : 25;
+    const speed  = layer === 0 ? 0.3 : 0.6;
+    const alpha  = layer === 0 ? 0.35 : 0.7;
+    const size   = layer === 0 ? 1 : 2;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    for (let i = 0; i < count; i++) {
+      const sx = (i * 173.7 + layer * 300) % W;
+      const sy = ((i * 113.1 + layer * 500 + t * speed) % (H * 3) + H * 3) % (H * 3) % H;
+      ctx.fillRect(sx, sy, size, size);
+    }
   }
 }
 
 function drawPlatforms() {
+  const next = getNextPlatform();
   for (const p of platforms) {
     const sy = wy(p.y);
-    if (sy > H + 30 || sy < -30) continue;
+    if (sy > H + 40 || sy < -40) continue;
+
+    const isActive = p.dir !== null;
+    const isTarget = p === next;
+
+    // Glow for target platform
+    if (isTarget && (state === 'idle' || state === 'charging')) {
+      const pulse = 0.4 + 0.3 * Math.sin(performance.now() / 400);
+      ctx.shadowColor = '#6488ff';
+      ctx.shadowBlur  = 14 * pulse;
+    }
 
     // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(p.x + 5, sy + 5, p.w, p.h);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(p.x + 4, sy + 6, p.w, p.h);
 
-    // Body gradient
+    // Body
     const g = ctx.createLinearGradient(p.x, sy, p.x, sy + p.h);
-    const isNext = p.dir !== null;
-    if (isNext) {
-      g.addColorStop(0, '#6488ff');
-      g.addColorStop(1, '#3355cc');
+    if (isActive) {
+      g.addColorStop(0, isTarget ? '#7ba0ff' : '#5577ee');
+      g.addColorStop(1, isTarget ? '#4466cc' : '#2a44aa');
     } else {
-      g.addColorStop(0, '#3a3a5a');
-      g.addColorStop(1, '#252535');
+      g.addColorStop(0, '#2e2e4e');
+      g.addColorStop(1, '#1a1a32');
     }
     ctx.fillStyle = g;
     ctx.fillRect(p.x, sy, p.w, p.h);
 
-    // Top shine
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
     ctx.fillRect(p.x + 2, sy + 1, p.w - 4, 3);
+
+    ctx.shadowBlur = 0;
   }
-}
-
-function drawNextArrow() {
-  if (state !== 'idle' && state !== 'charging') return;
-  const next = getNextPlatform();
-  if (!next) return;
-
-  // Arrow showing direction of next jump
-  const dir     = next.dir;
-  const arrowY  = wy(player.y) - 12;
-  const arrowX  = player.x + PLAYER_SIZE / 2 + dir * 22;
-  const pulse   = 0.5 + 0.5 * Math.sin(performance.now() / 300);
-
-  ctx.save();
-  ctx.globalAlpha = 0.4 + pulse * 0.4;
-  ctx.fillStyle = '#aabbff';
-  ctx.font = 'bold 18px "Courier New"';
-  ctx.textAlign = 'center';
-  ctx.fillText(dir === 1 ? '→' : '←', arrowX, arrowY);
-  ctx.textAlign = 'left';
-  ctx.restore();
 }
 
 function drawTrajectory() {
-  if (state !== 'charging' || charge < 0.08) return;
+  if (state !== 'charging' || charge < 0.06) return;
   const next = getNextPlatform();
   if (!next) return;
 
-  const power = charge;
-  const dir   = next.dir;
-  const vx    = dir * (1.8 + power * 7.5);
-  const vy    = -(3.5 + power * 11);
-
-  let x = player.x + PLAYER_SIZE / 2;
-  let y = player.y + PLAYER_SIZE / 2;
+  const dir = next.dir;
+  const vx  = dir * (1.8 + charge * 7.5);
+  const vy  = -(3.5 + charge * 11);
+  let x = player.x + PLAYER_SIZE / 2, y = player.y + PLAYER_SIZE / 2;
   let dvx = vx, dvy = vy;
 
   ctx.save();
-  ctx.setLineDash([3, 7]);
-  ctx.strokeStyle = 'rgba(180,200,255,0.3)';
+  ctx.setLineDash([3, 8]);
+  ctx.strokeStyle = `rgba(150,180,255,${0.15 + charge * 0.2})`;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(x, wy(y));
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 70; i++) {
     dvy += GRAVITY;
     x   += dvx;
     y   += dvy;
-    const sy = wy(y);
-    if (sy > H + 20) break;
-    ctx.lineTo(x, sy);
+    if (wy(y) > H + 10) break;
+    ctx.lineTo(x, wy(y));
   }
   ctx.stroke();
+  ctx.setLineDash([]);
   ctx.restore();
 }
 
 function drawPlayer() {
-  const sx = Math.round(player.x);
-  const sy = Math.round(wy(player.y));
+  const sx  = Math.round(player.x);
+  const sy  = Math.round(wy(player.y));
+  const isScared = state === 'jumping' && player.vy > 7;
+  const isUp     = state === 'jumping' && player.vy < -2;
 
-  // Drop shadow on platform below
+  // Shadow on landing platform
   if (state === 'jumping' && player.vy > 0) {
-    const landPlat = platforms.find(p =>
-      p.dir !== null &&
-      player.x + PLAYER_SIZE > p.x &&
-      player.x < p.x + p.w &&
-      p.y > player.y
-    );
-    if (landPlat) {
-      const dist  = landPlat.y - (player.y + PLAYER_SIZE);
-      const alpha = Math.max(0, 0.35 - dist / 250);
-      const scaleX = Math.max(0.2, 1 - dist / 350);
-      const sw    = PLAYER_SIZE * scaleX;
-      const lsy   = wy(landPlat.y);
-      ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-      ctx.fillRect(player.x + (PLAYER_SIZE - sw) / 2, lsy - 3, sw, 4);
+    const lp = platforms.find(p => p.dir !== null && player.x + PLAYER_SIZE > p.x && player.x < p.x + p.w && p.y > player.y);
+    if (lp) {
+      const dist = lp.y - (player.y + PLAYER_SIZE);
+      const a    = Math.max(0, 0.4 - dist / 220);
+      const sw   = Math.max(8, PLAYER_SIZE * (1 - dist / 300));
+      ctx.fillStyle = `rgba(0,0,0,${a})`;
+      ctx.fillRect(player.x + (PLAYER_SIZE - sw) / 2, wy(lp.y) - 3, sw, 4);
     }
   }
 
+  // Body glow
+  ctx.shadowColor = isScared ? '#e74c3c' : '#f0a030';
+  ctx.shadowBlur  = 12;
+
   // Body
-  const isScared = state === 'jumping' && player.vy > 7;
-  ctx.fillStyle = isScared ? '#e74c3c' : '#e8a020';
+  ctx.fillStyle = isScared ? '#e74c3c' : '#f0a030';
   ctx.fillRect(sx, sy, PLAYER_SIZE, PLAYER_SIZE);
 
   // Highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
   ctx.fillRect(sx + 2, sy + 2, PLAYER_SIZE - 4, 8);
 
-  // Eyes (tilt up when going up, down when falling)
-  const eyeOff = state === 'jumping' ? (player.vy < 0 ? -2 : 2) : 0;
+  // Eyes
+  const eyeOff = isUp ? -2 : isScared ? 2 : 0;
   ctx.fillStyle = 'white';
   ctx.fillRect(sx + 5,  sy + 8 + eyeOff, 7, 7);
   ctx.fillRect(sx + 16, sy + 8 + eyeOff, 7, 7);
-  ctx.fillStyle = '#1a1a2e';
+  ctx.fillStyle = '#111';
   ctx.fillRect(sx + 7,  sy + 10 + eyeOff, 4, 4);
   ctx.fillRect(sx + 18, sy + 10 + eyeOff, 4, 4);
+
+  // Sweat drop when scared
+  if (isScared) {
+    ctx.fillStyle = '#5af';
+    ctx.fillRect(sx + PLAYER_SIZE - 2, sy + 4, 4, 6);
+    ctx.fillRect(sx + PLAYER_SIZE,     sy + 9, 2, 3);
+  }
 }
 
 function drawChargeBar() {
   if (state !== 'charging') return;
-
-  const bw = 60, bh = 10;
+  const bw = 64, bh = 11;
   const bx = player.x + PLAYER_SIZE / 2 - bw / 2;
-  const by = wy(player.y) - 24;
+  const by = wy(player.y) - 28;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+  // Bg
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  roundRect(bx - 2, by - 2, bw + 4, bh + 4, 4);
 
+  // Fill
   let r, g;
-  if (charge < 0.5) {
-    r = Math.floor(charge * 2 * 255);
-    g = 200;
-  } else {
-    r = 255;
-    g = Math.floor((1 - (charge - 0.5) * 2) * 200);
-  }
-  ctx.fillStyle = `rgb(${r},${g},60)`;
-  ctx.fillRect(bx, by, bw * charge, bh);
+  if (charge < 0.5) { r = Math.floor(charge * 2 * 255); g = 200; }
+  else              { r = 255; g = Math.floor((1 - (charge - 0.5) * 2) * 200); }
+  ctx.fillStyle = `rgb(${r},${g},50)`;
+  if (charge > 0) roundRect(bx, by, bw * charge, bh, 3);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-  ctx.lineWidth = 1;
+  // Border
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth   = 1;
   ctx.strokeRect(bx, by, bw, bh);
 
-  // Tick marks
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  for (const t of [0.33, 0.66]) {
-    ctx.fillRect(bx + bw * t, by + 2, 1, bh - 4);
-  }
+  // Ticks
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  for (const t of [1/3, 2/3]) ctx.fillRect(bx + bw * t, by + 2, 1, bh - 4);
 }
 
-function drawHUD() {
-  // Background panel
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(10, 10, W - 20, 44);
+function drawArrow() {
+  if (state !== 'idle' && state !== 'charging') return;
+  const next = getNextPlatform();
+  if (!next) return;
+  const dir   = next.dir;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 350);
+  const ax    = dir === 1 ? player.x + PLAYER_SIZE + 10 : player.x - 10;
+  const ay    = wy(player.y) + PLAYER_SIZE / 2 + 2;
 
-  // Jump count
-  ctx.fillStyle = '#6488ff';
-  ctx.font = 'bold 18px "Courier New"';
-  ctx.fillText(`JUMPS`, 20, 30);
-  ctx.fillStyle = 'white';
-  ctx.fillText(`${String(score).padStart(3, '0')} / ${TARGET_JUMPS}`, 90, 30);
-
-  // Progress bar
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(20, 38, W - 40, 6);
-  const pg = ctx.createLinearGradient(20, 0, W - 20, 0);
-  pg.addColorStop(0, '#6488ff');
-  pg.addColorStop(1, '#a0ffcc');
-  ctx.fillStyle = pg;
-  ctx.fillRect(20, 38, (W - 40) * (score / TARGET_JUMPS), 6);
-
-  // Best
-  if (bestScore > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ctx.font = '11px "Courier New"';
-    ctx.textAlign = 'right';
-    ctx.fillText(`BEST ${bestScore}`, W - 14, 28);
-    ctx.textAlign = 'left';
-  }
-
-  // Direction indicator (top right corner)
-  if (state === 'idle' || state === 'charging') {
-    const next = getNextPlatform();
-    if (next) {
-      const label = next.dir === 1 ? 'JUMP →' : '← JUMP';
-      ctx.fillStyle = 'rgba(100,136,255,0.8)';
-      ctx.font = 'bold 13px "Courier New"';
-      ctx.textAlign = next.dir === 1 ? 'right' : 'left';
-      ctx.fillText(label, next.dir === 1 ? W - 14 : 14, H - 14);
-      ctx.textAlign = 'left';
-    }
-  }
-
-  // First-time hint
-  if (score === 0 && state === 'idle') {
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = '13px "Courier New"';
-    ctx.textAlign = 'center';
-    ctx.fillText('Hold SPACE · release to jump', W / 2, H - 14);
-    ctx.textAlign = 'left';
-  }
+  ctx.save();
+  ctx.globalAlpha = 0.3 + pulse * 0.5;
+  ctx.fillStyle   = '#aac0ff';
+  ctx.font        = 'bold 20px "Space Grotesk", monospace';
+  ctx.textAlign   = dir === 1 ? 'left' : 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(dir === 1 ? '▶' : '◀', ax, ay);
+  ctx.restore();
 }
 
 function drawParticles() {
+  ctx.save();
   for (const p of particles) {
     ctx.globalAlpha = p.life;
-    ctx.fillStyle = `hsl(${p.hue}, 70%, 65%)`;
+    ctx.fillStyle   = `hsl(${p.hue},70%,65%)`;
     ctx.fillRect(p.x - p.size / 2, wy(p.y) - p.size / 2, p.size, p.size);
   }
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
+function drawHUD() {
+  // Top bar background
+  ctx.fillStyle = 'rgba(5,5,20,0.8)';
+  ctx.fillRect(0, 0, W, 58);
+
+  // JUMPS label
+  ctx.fillStyle = 'rgba(100,136,255,0.7)';
+  ctx.font      = '11px "Space Grotesk", monospace';
+  ctx.fillText('JUMPS', 16, 18);
+
+  // Count
+  ctx.fillStyle = 'white';
+  ctx.font      = 'bold 26px "Space Grotesk", monospace';
+  ctx.fillText(`${score}`, 16, 44);
+
+  // /100
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font      = '14px "Space Grotesk", monospace';
+  ctx.fillText(`/ ${TARGET_JUMPS}`, 16 + ctx.measureText(`${score}`).width + 5, 44);
+
+  // Progress bar
+  const bx = 16, by = 50, bw = W - 32, bh = 4;
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(bx, by, bw, bh);
+  const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+  pg.addColorStop(0, '#5577ff');
+  pg.addColorStop(1, '#88ffcc');
+  ctx.fillStyle = pg;
+  ctx.fillRect(bx, by, bw * (score / TARGET_JUMPS), bh);
+
+  // Best score (top right)
+  if (bestScore > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font      = '11px "Space Grotesk", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`BEST  ${bestScore}`, W - 14, 18);
+    ctx.textAlign = 'left';
+  }
+
+  // Jump direction label (bottom of screen)
+  if (state === 'idle' || state === 'charging') {
+    const next = getNextPlatform();
+    if (next) {
+      const lbl = next.dir === 1 ? '▶  JUMP RIGHT' : 'JUMP LEFT  ◀';
+      ctx.fillStyle  = 'rgba(100,136,255,0.65)';
+      ctx.font       = 'bold 12px "Space Grotesk", monospace';
+      ctx.textAlign  = 'center';
+      ctx.fillText(lbl, W / 2, H - 14);
+      ctx.textAlign  = 'left';
+    }
+  }
+
+  // First-run hint
+  if (score === 0 && state === 'idle') {
+    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.font      = '13px "Space Grotesk", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Hold SPACE to charge · release to jump', W / 2, H - 34);
+    ctx.textAlign = 'left';
+  }
+}
+
+// ─── Intro screen ────────────────────────────────────────────────────────────
+function drawIntro(now) {
+  drawBg();
+
+  // Title
+  const pulse = 0.92 + 0.08 * Math.sin(now / 600);
+  ctx.save();
+  ctx.translate(W / 2, H / 2 - 60);
+  ctx.scale(pulse, pulse);
+
+  // Big number
+  ctx.fillStyle = '#6488ff';
+  ctx.font      = 'bold 96px "Space Grotesk", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('100', 0, -30);
+
+  ctx.fillStyle = 'white';
+  ctx.font      = 'bold 36px "Space Grotesk", monospace';
+  ctx.fillText('JUMPS UP', 0, 40);
+
+  ctx.restore();
+
+  // Animated mini player demo
+  const demoX = W / 2 - 14;
+  const demoY = H / 2 + 80 + Math.sin(now / 500) * 8;
+  ctx.fillStyle = '#f0a030';
+  ctx.fillRect(demoX, demoY, 28, 28);
+  ctx.fillStyle = 'white';
+  ctx.fillRect(demoX + 5,  demoY + 8,  7, 7);
+  ctx.fillRect(demoX + 16, demoY + 8,  7, 7);
+  ctx.fillStyle = '#111';
+  ctx.fillRect(demoX + 7,  demoY + 10, 4, 4);
+  ctx.fillRect(demoX + 18, demoY + 10, 4, 4);
+
+  // Platform below demo player
+  ctx.fillStyle = '#5577ee';
+  ctx.fillRect(W / 2 - 60, H / 2 + 114, 120, 14);
+
+  // Press to start
+  const a = 0.5 + 0.5 * Math.sin(now / 500);
+  ctx.fillStyle = `rgba(255,255,255,${a})`;
+  ctx.font      = 'bold 15px "Space Grotesk", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('PRESS SPACE  or  TAP  to start', W / 2, H - 50);
+  ctx.textAlign = 'left';
+
+  // Best score
+  if (bestScore > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font      = '13px "Space Grotesk", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Best: ${bestScore} jumps`, W / 2, H - 24);
+    ctx.textAlign = 'left';
+  }
+}
+
+// ─── Overlay (dead / win) ────────────────────────────────────────────────────
 function drawOverlay() {
   if (state !== 'dead' && state !== 'win') return;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
   ctx.fillRect(0, 0, W, H);
+
   ctx.textAlign = 'center';
 
   if (state === 'dead') {
     ctx.fillStyle = '#e74c3c';
-    ctx.font = 'bold 46px "Courier New"';
-    ctx.fillText('GAME OVER', W / 2, H / 2 - 40);
+    ctx.font      = 'bold 52px "Space Grotesk", monospace';
+    ctx.fillText('GAME OVER', W / 2, H / 2 - 44);
 
     ctx.fillStyle = 'white';
-    ctx.font = '20px "Courier New"';
+    ctx.font      = '22px "Space Grotesk", monospace';
     ctx.fillText(`${score} jump${score !== 1 ? 's' : ''} up`, W / 2, H / 2 + 10);
 
-    if (score === bestScore && score > 0) {
+    if (score > 0 && score === bestScore) {
       ctx.fillStyle = '#f1c40f';
-      ctx.font = '15px "Courier New"';
-      ctx.fillText('NEW BEST!', W / 2, H / 2 + 40);
+      ctx.font      = 'bold 16px "Space Grotesk", monospace';
+      ctx.fillText('★  NEW BEST  ★', W / 2, H / 2 + 46);
     }
 
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = '14px "Courier New"';
-    ctx.fillText('SPACE to retry', W / 2, H / 2 + 75);
+    const a = 0.4 + 0.3 * Math.sin(performance.now() / 500);
+    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    ctx.font      = '14px "Space Grotesk", monospace';
+    ctx.fillText('SPACE / TAP to try again', W / 2, H / 2 + 84);
   }
 
   if (state === 'win') {
     ctx.fillStyle = '#f1c40f';
-    ctx.font = 'bold 46px "Courier New"';
-    ctx.fillText('YOU WIN!', W / 2, H / 2 - 40);
+    ctx.font      = 'bold 52px "Space Grotesk", monospace';
+    ctx.fillText('YOU WIN!', W / 2, H / 2 - 44);
 
     ctx.fillStyle = 'white';
-    ctx.font = '20px "Courier New"';
-    ctx.fillText('100 jumps reached!', W / 2, H / 2 + 10);
+    ctx.font      = '20px "Space Grotesk", monospace';
+    ctx.fillText('100 jumps reached!', W / 2, H / 2 + 8);
 
-    ctx.fillStyle = '#6488ff';
-    ctx.font = '14px "Courier New"';
-    ctx.fillText('SPACE to play again', W / 2, H / 2 + 55);
+    ctx.fillStyle = '#88aaff';
+    ctx.font      = '14px "Space Grotesk", monospace';
+    ctx.fillText('SPACE / TAP to play again', W / 2, H / 2 + 52);
   }
 
   ctx.textAlign = 'left';
 }
 
-// ─── Loop ─────────────────────────────────────────────────────────────────────
+// ─── Main loop ────────────────────────────────────────────────────────────────
 function loop(now) {
   update(now);
 
-  const sx = shakeAmt > 0.5 ? (Math.random() - 0.5) * shakeAmt * 2 : 0;
-  const sy = shakeAmt > 0.5 ? (Math.random() - 0.5) * shakeAmt * 2 : 0;
+  if (state === 'intro') {
+    drawIntro(now);
+    requestAnimationFrame(loop);
+    return;
+  }
 
+  // Screen shake
+  const sx = shakeAmt > 0.5 ? rand(-shakeAmt, shakeAmt) : 0;
+  const sy = shakeAmt > 0.5 ? rand(-shakeAmt, shakeAmt) : 0;
   ctx.save();
   if (sx || sy) ctx.translate(sx, sy);
 
-  drawBackground();
+  drawBg();
   drawPlatforms();
   drawParticles();
   drawTrajectory();
-  drawNextArrow();
+  drawArrow();
   drawChargeBar();
   drawPlayer();
   drawHUD();
@@ -587,7 +660,11 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
+// ─── Boot ────────────────────────────────────────────────────────────────────
+state = 'intro';
+// Pre-build platforms so the intro has something ready
 reset();
+state = 'intro';
 requestAnimationFrame(loop);
 </script>
 </body>
