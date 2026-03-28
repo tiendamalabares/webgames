@@ -72,7 +72,7 @@ const GRAVITY       = 0.75;
 const PLAYER_SIZE   = 28;
 const PLAT_H        = 14;
 const TARGET_JUMPS  = 100;
-const MAX_CHARGE_MS = 1800;
+const MAX_CHARGE_MS = 800;
 const VERT_GAP      = 150;          // fixed — always same jump height
 const CAM_PLAYER_Y  = H * 0.65;
 
@@ -80,7 +80,7 @@ const CAM_PLAYER_Y  = H * 0.65;
 const WIDTH_BASE    = 80;
 const WIDTH_SHRINK  = 0.75;
 const WIDTH_MIN     = 10;
-const MAX_VX        = 2.7;          // full charge → 90px horizontal reach
+const MAX_VX        = 3.5;          // full charge → ~115px horizontal reach
 
 // ─── State ───────────────────────────────────────────────────────────────────
 // states: 'intro' | 'idle' | 'charging' | 'jumping' | 'dead' | 'win'
@@ -113,8 +113,8 @@ function addNextPlatform() {
   nextPlatDir = -dir;
 
   // Random offset always within reachable range [15, 82] and within screen
-  const maxOff = Math.min(82, dir === 1 ? maxCx - lastCx : lastCx - minCx);
-  const offset  = rand(15, Math.max(15, maxOff));
+  const maxOff = Math.min(112, dir === 1 ? maxCx - lastCx : lastCx - minCx);
+  const offset  = rand(5, Math.max(5, maxOff));
   let newCx     = lastCx + dir * offset;
   newCx = Math.max(minCx, Math.min(maxCx, newCx));
   platforms.push({ x: newCx - w / 2, y: last.y - VERT_GAP, w, h: PLAT_H, dir });
