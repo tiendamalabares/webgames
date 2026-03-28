@@ -209,7 +209,7 @@ let SHOW_TRAJ     = false;          // trajectory line off by default
 // ─── State ───────────────────────────────────────────────────────────────────
 // states: 'intro' | 'idle' | 'charging' | 'jumping' | 'dead' | 'win'
 let state, player, platforms, score, charge, chargeStart;
-let spaceHeld, cameraY, particles, shakeAmt, bestScore = 0;
+let spaceHeld, cameraY, camTarget, camSliding, particles, shakeAmt, bestScore = 0;
 let introAnim = 0; // for intro screen animation
 let nextPlatDir = 1; // alternates ±1 independently of array length
 
@@ -269,7 +269,9 @@ function reset() {
 
   // player.y = hand position (grabs platform TOP edge, body hangs below)
   player  = { x: W / 2 - PLAYER_SIZE / 2, y: startY, vx: 0, vy: 0, grabDir: 1 };
-  cameraY = player.y - CAM_PLAYER_Y;
+  cameraY   = player.y - CAM_PLAYER_Y;
+  camTarget = cameraY;
+  camSliding = false;
 }
 
 // ─── Input ───────────────────────────────────────────────────────────────────
@@ -369,7 +371,9 @@ function update(now) {
             if (score > bestScore) bestScore = score;
           } else {
             state = 'idle';
-            addNextPlatform(); // keep all past platforms visible, just add 1 new target
+            addNextPlatform(); // add new target before sliding
+            camTarget  = player.y - CAM_PLAYER_Y;
+            camSliding = true;
           }
           break;
         }
@@ -384,9 +388,11 @@ function update(now) {
     }
   }
 
-  // Camera: follow player upward only
-  const targetCam = player.y - CAM_PLAYER_Y;
-  if (targetCam < cameraY) cameraY = lerp(cameraY, targetCam, 0.09);
+  // Camera: still while player is in the air, slides on landing
+  if (camSliding) {
+    cameraY = lerp(cameraY, camTarget, 0.07);
+    if (Math.abs(cameraY - camTarget) < 0.5) { cameraY = camTarget; camSliding = false; }
+  }
 
   // Cull platforms that are more than 1.5 screens below camera (memory safety)
   platforms = platforms.filter(p => p.y < cameraY + H * 1.5);
