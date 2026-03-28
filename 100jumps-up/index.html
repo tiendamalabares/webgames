@@ -68,18 +68,18 @@ resize();
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const W = CW, H = CH;
-const GRAVITY       = 0.38;
+const GRAVITY       = 0.75;
 const PLAYER_SIZE   = 28;
 const PLAT_H        = 14;
 const TARGET_JUMPS  = 100;
 const MAX_CHARGE_MS = 1800;
-const VERT_GAP_BASE = 135;
+const VERT_GAP_BASE = 55;
 const CAM_PLAYER_Y  = H * 0.65;
 
 // Difficulty scaling
-const OFFSET_BASE   = 68;
-const OFFSET_GROW   = 1.5;
-const OFFSET_MAX    = 185;
+const OFFSET_BASE   = 40;
+const OFFSET_GROW   = 0.8;
+const OFFSET_MAX    = 90;
 const WIDTH_BASE    = 132;
 const WIDTH_SHRINK  = 0.65;
 const WIDTH_MIN     = 52;
@@ -106,7 +106,7 @@ function addNextPlatform() {
   const dir     = idx % 2 === 1 ? 1 : -1;
   const offset  = platOffset(safeIdx);
   const w       = platWidth(safeIdx);
-  const vertGap = VERT_GAP_BASE + rand(0, 25);
+  const vertGap = VERT_GAP_BASE + rand(0, 15);
   const lastCx  = last.x + last.w / 2;
   let newCx     = lastCx + dir * offset;
   newCx = Math.max(w / 2 + 18, Math.min(W - w / 2 - 18, newCx));
@@ -149,8 +149,8 @@ function onRelease() {
   const power   = Math.max(0.05, charge);
   const next    = getNextPlatform();
   const dir     = next ? next.dir : 1;
-  player.vx     = dir * (1.8 + power * 7.5);
-  player.vy     = -(3.5 + power * 11);
+  player.vx     = dir * (1.8 + power * 0.9);
+  player.vy     = -(9.5 + power * 4.5);
   state         = 'jumping';
   charge        = 0;
 }
