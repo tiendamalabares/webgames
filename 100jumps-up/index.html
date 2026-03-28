@@ -89,6 +89,7 @@ const WIDTH_MIN     = 52;
 let state, player, platforms, score, charge, chargeStart;
 let spaceHeld, cameraY, particles, shakeAmt, bestScore = 0;
 let introAnim = 0; // for intro screen animation
+let nextPlatDir = 1; // alternates ±1 independently of array length
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const platWidth  = i => Math.max(WIDTH_MIN,  WIDTH_BASE  - i * WIDTH_SHRINK);
@@ -103,7 +104,8 @@ function addNextPlatform() {
   const last    = platforms[platforms.length - 1];
   const idx     = platforms.length;
   const safeIdx = Math.min(idx + score, 85);
-  const dir     = idx % 2 === 1 ? 1 : -1;
+  const dir     = nextPlatDir;
+  nextPlatDir   = -nextPlatDir;
   const offset  = platOffset(safeIdx);
   const w       = platWidth(safeIdx);
   const vertGap = VERT_GAP_BASE + rand(0, 15);
@@ -124,6 +126,7 @@ function reset() {
   shakeAmt   = 0;
 
   const startW = 180, startX = W / 2 - 90, startY = 1400;
+  nextPlatDir = 1;
   platforms = [{ x: startX, y: startY, w: startW, h: PLAT_H, dir: null }];
   for (let i = 0; i < 9; i++) addNextPlatform();
 
