@@ -73,16 +73,14 @@ const PLAYER_SIZE   = 28;
 const PLAT_H        = 14;
 const TARGET_JUMPS  = 100;
 const MAX_CHARGE_MS = 1800;
-const VERT_GAP_BASE = 70;
+const VERT_GAP      = 150;          // fixed — always same jump height
 const CAM_PLAYER_Y  = H * 0.65;
 
-// Difficulty scaling
-const OFFSET_BASE   = 40;
-const OFFSET_GROW   = 1.3;
-const OFFSET_MAX    = 110;
-const WIDTH_BASE    = 55;
-const WIDTH_SHRINK  = 0.5;
-const WIDTH_MIN     = 16;
+// Only width changes with difficulty; offset is random each jump
+const WIDTH_BASE    = 80;
+const WIDTH_SHRINK  = 0.75;
+const WIDTH_MIN     = 10;
+const MAX_VX        = 2.7;          // full charge → 90px horizontal reach
 
 // ─── State ───────────────────────────────────────────────────────────────────
 // states: 'intro' | 'idle' | 'charging' | 'jumping' | 'dead' | 'win'
@@ -93,7 +91,6 @@ let nextPlatDir = 1; // alternates ±1 independently of array length
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const platWidth  = i => Math.max(WIDTH_MIN,  WIDTH_BASE  - i * WIDTH_SHRINK);
-const platOffset = i => Math.min(OFFSET_MAX, OFFSET_BASE + i * OFFSET_GROW);
 const wy         = worldY => worldY - cameraY;
 const lerp       = (a, b, t) => a + (b - a) * t;
 
@@ -104,16 +101,23 @@ function addNextPlatform() {
   const last    = platforms[platforms.length - 1];
   const idx     = platforms.length;
   const safeIdx = Math.min(idx + score, 85);
-  const dir     = nextPlatDir;
-  nextPlatDir   = -nextPlatDir;
-  const rawOffset = platOffset(safeIdx) + rand(-10, 10);
-  const offset    = Math.max(25, rawOffset);
-  const w         = platWidth(safeIdx);
-  const vertGap   = rand(60, 220);
-  const lastCx    = last.x + last.w / 2;
-  let newCx       = lastCx + dir * offset;
-  newCx = Math.max(w / 2 + 18, Math.min(W - w / 2 - 18, newCx));
-  platforms.push({ x: newCx - w / 2, y: last.y - vertGap, w, h: PLAT_H, dir });
+  const w       = platWidth(safeIdx);
+  const minCx   = w / 2 + 18;
+  const maxCx   = W - w / 2 - 18;
+  const lastCx  = last.x + last.w / 2;
+
+  // Choose direction that has room; prefer alternating
+  let dir = nextPlatDir;
+  const roomDir  = dir === 1 ? maxCx - lastCx : lastCx - minCx;
+  if (roomDir < 15) dir = -dir; // flip if no room
+  nextPlatDir = -dir;
+
+  // Random offset always within reachable range [15, 82] and within screen
+  const maxOff = Math.min(82, dir === 1 ? maxCx - lastCx : lastCx - minCx);
+  const offset  = rand(15, Math.max(15, maxOff));
+  let newCx     = lastCx + dir * offset;
+  newCx = Math.max(minCx, Math.min(maxCx, newCx));
+  platforms.push({ x: newCx - w / 2, y: last.y - VERT_GAP, w, h: PLAT_H, dir });
 }
 
 // ─── Reset / init ────────────────────────────────────────────────────────────
@@ -150,11 +154,10 @@ function onRelease() {
   spaceHeld = false;
   if (state !== 'charging') return;
 
-  const power   = Math.max(0.05, charge);
   const next    = getNextPlatform();
   const dir     = next ? next.dir : 1;
-  player.vx     = dir * (1.5 + power * 1.2);
-  player.vy     = -(11 + power * 8);
+  player.vx     = dir * charge * MAX_VX;
+  player.vy     = -17;
   state         = 'jumping';
   charge        = 0;
 }
@@ -336,40 +339,53 @@ function drawPlatforms() {
 }
 
 function drawTrajectory() {
-  if (state !== 'charging' || charge < 0.02) return;
+  if (state !== 'charging') return;
   const next = getNextPlatform();
   if (!next) return;
 
-  const power = Math.max(0.05, charge);
   const dir = next.dir;
-  const vx  = dir * (1.5 + power * 1.2);
-  const vy  = -(11 + power * 8);
-  let x = player.x + PLAYER_SIZE / 2, y = player.y + PLAYER_SIZE / 2;
+  const vx  = dir * charge * MAX_VX;   // same as onRelease
+  const vy  = -17;                      // same as onRelease
+  let x = player.x + PLAYER_SIZE / 2;
+  let y = player.y + PLAYER_SIZE;       // bottom of player
   let dvx = vx, dvy = vy;
+  let landX = x, landY = y;
 
   ctx.save();
   ctx.shadowColor = 'rgba(160,210,255,0.8)';
   ctx.shadowBlur  = 8;
   ctx.setLineDash([4, 7]);
-  ctx.strokeStyle = `rgba(180,220,255,${0.5 + charge * 0.5})`;
+  ctx.strokeStyle = `rgba(180,220,255,${0.4 + charge * 0.6})`;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(x, wy(y));
-  for (let i = 0; i < 140; i++) {
+
+  for (let i = 0; i < 200; i++) {
+    const prevY = y;
     dvy += GRAVITY;
     x   += dvx;
     y   += dvy;
+    // Stop exactly when bottom of player crosses next platform top (falling)
+    if (dvy > 0 && prevY < next.y && y >= next.y) {
+      // Interpolate landing x
+      const frac = (next.y - prevY) / (y - prevY);
+      landX = x - dvx * (1 - frac);
+      landY = next.y;
+      ctx.lineTo(landX, wy(landY));
+      break;
+    }
+    landX = x; landY = y;
     if (wy(y) > H + 10) break;
     ctx.lineTo(x, wy(y));
   }
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Landing dot
-  ctx.shadowBlur = 14;
+  // Landing dot on the platform level
+  ctx.shadowBlur = 16;
   ctx.beginPath();
-  ctx.arc(x, wy(y), 5, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(200,230,255,${0.7 + charge * 0.3})`;
+  ctx.arc(landX, wy(landY), 5, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(200,230,255,${0.6 + charge * 0.4})`;
   ctx.fill();
 
   ctx.restore();
