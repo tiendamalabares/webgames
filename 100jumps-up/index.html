@@ -362,7 +362,8 @@ function update(now) {
             if (score > bestScore) bestScore = score;
           } else {
             state = 'idle';
-            while (platforms.length < 3) addNextPlatform();
+            const aheadNow = platforms.filter(p => p.y + PLAT_H < player.y - 5).length;
+            for (let j = aheadNow; j < 2; j++) addNextPlatform();
           }
           break;
         }
@@ -383,7 +384,9 @@ function update(now) {
 
   // Cull & generate
   platforms = platforms.filter(p => p.y < cameraY + H + 80);
-  while (platforms.length < 3) addNextPlatform();
+  // Ensure at least 2 platforms are buffered ABOVE the player (old ones below don't count)
+  const ahead = platforms.filter(p => p.y + PLAT_H < player.y - 5).length;
+  for (let i = ahead; i < 2; i++) addNextPlatform();
 
   // Particles
   for (const p of particles) {
