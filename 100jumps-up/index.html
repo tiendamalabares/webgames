@@ -261,8 +261,8 @@ function reset() {
   platforms = [{ x: startX, y: startY, w: startW, h: PLAT_H, dir: null }];
   for (let i = 0; i < 2; i++) addNextPlatform();
 
-  // player.y = hand position (top of character, grabs platform bottom)
-  player  = { x: W / 2 - PLAYER_SIZE / 2, y: startY + PLAT_H, vx: 0, vy: 0, grabDir: 1 };
+  // player.y = hand position (grabs platform TOP edge, body hangs below)
+  player  = { x: W / 2 - PLAYER_SIZE / 2, y: startY, vx: 0, vy: 0, grabDir: 1 };
   cameraY = player.y - CAM_PLAYER_Y;
 }
 
@@ -303,8 +303,8 @@ tapEl.addEventListener('pointerup',   e => { e.preventDefault(); onRelease(); })
 
 // ─── Game logic ───────────────────────────────────────────────────────────────
 function getNextPlatform() {
-  // Next platform is above the hand (p.y + PLAT_H < player.y means bottom above hand)
-  return platforms.find(p => p.dir !== null && p.y + PLAT_H < player.y - 5);
+  // Next platform is above: its top edge (p.y) is above player's hand (player.y)
+  return platforms.find(p => p.dir !== null && p.y < player.y - 5);
 }
 
 function spawnParticles(x, y) {
@@ -338,22 +338,22 @@ function update(now) {
     player.x  += player.vx;
     player.y  += player.vy;
 
-    if (player.vy < 0) {  // grabbing while going UP
+    if (player.vy > 0) {  // falling down — grab platform top on the way down
       for (const p of platforms) {
         if (p.dir === null) continue;
         const handY     = player.y;
-        const prevHandY = handY - player.vy;  // was lower (vy<0 → prev was higher y)
+        const prevHandY = handY - player.vy;
         if (
           player.x + PLAYER_SIZE > p.x + 3 &&
           player.x               < p.x + p.w - 3 &&
-          prevHandY >= p.y + PLAT_H &&
-          handY     <= p.y + PLAT_H + 4
+          prevHandY <= p.y &&
+          handY     >= p.y - 4
         ) {
-          player.y  = p.y + PLAT_H;  // hand snaps to platform bottom
+          player.y  = p.y;  // hand snaps to platform top
           player.vx = 0; player.vy = 0;
           player.grabDir = -player.grabDir;  // alternate hand
           score++;
-          spawnParticles(player.x + PLAYER_SIZE / 2, p.y + PLAT_H);
+          spawnParticles(player.x + PLAYER_SIZE / 2, p.y);
           shakeAmt = 5;
           p.dir = null;
 
@@ -362,7 +362,7 @@ function update(now) {
             if (score > bestScore) bestScore = score;
           } else {
             state = 'idle';
-            const aheadNow = platforms.filter(p => p.y + PLAT_H < player.y - 5).length;
+            const aheadNow = platforms.filter(p => p.y < player.y - 5).length;
             for (let j = aheadNow; j < 2; j++) addNextPlatform();
           }
           break;
@@ -385,7 +385,7 @@ function update(now) {
   // Cull & generate
   platforms = platforms.filter(p => p.y < cameraY + H + 80);
   // Ensure at least 2 platforms are buffered ABOVE the player (old ones below don't count)
-  const ahead = platforms.filter(p => p.y + PLAT_H < player.y - 5).length;
+  const ahead = platforms.filter(p => p.y < player.y - 5).length;
   for (let i = ahead; i < 2; i++) addNextPlatform();
 
   // Particles
@@ -497,12 +497,11 @@ function drawTrajectory() {
     dvy += GRAVITY;
     x   += dvx;
     y   += dvy;
-    // Stop when hand crosses next platform bottom (rising grab)
-    if (dvy < 0 && prevY > next.y + PLAT_H && y <= next.y + PLAT_H) {
-      // Interpolate landing x
-      const frac = (next.y + PLAT_H - prevY) / (y - prevY);
+    // Stop when hand crosses next platform top while falling
+    if (dvy > 0 && prevY <= next.y && y >= next.y) {
+      const frac = (next.y - prevY) / (y - prevY);
       landX = x - dvx * (1 - frac);
-      landY = next.y + PLAT_H;
+      landY = next.y;
       ctx.lineTo(landX, wy(landY));
       break;
     }
