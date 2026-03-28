@@ -398,9 +398,11 @@ function update(now) {
 
   // Cull platforms that are more than 1.5 screens below camera (memory safety)
   platforms = platforms.filter(p => p.y < cameraY + H * 1.5);
-  // Ensure 1 target platform always exists above the player
-  const hasTarget = platforms.some(p => p.dir !== null && p.y < player.y - PLAYER_SIZE * 1.4);
-  if (!hasTarget) addNextPlatform();
+  // Ensure 1 target platform always exists — only check when grounded, not mid-jump
+  if (state !== 'jumping') {
+    const hasTarget = platforms.some(p => p.dir !== null);
+    if (!hasTarget) addNextPlatform();
+  }
 
   // Particles
   for (const p of particles) {
