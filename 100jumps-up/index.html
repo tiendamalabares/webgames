@@ -787,94 +787,87 @@ function drawPlayer() {
 
   if (!isFlying) {
     // ── Hanging pose ──
-    const sx = gd * 3;  // shoulder X of raised arm
+    // gd=1  → right hand grabs → body/head lean LEFT
+    // gd=-1 → left hand grabs  → body/head lean RIGHT
+    const gripShX = gd * 5;   // shoulder of the gripping arm
+    const bodyX   = -gd * 3;  // centre of head/torso/legs (opposite side)
 
-    // Free arm (behind torso — draw first)
-    const fx = gd > 0 ? -10 : 8;
-    arm(-gd * 5, 46, fx, 60, fx + gd * 2, 78, 7, SK, false);
-    ctx.strokeStyle = SKD; ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-gd * 5 - gd, 46);
-    ctx.quadraticCurveTo(fx - gd, 60, fx + gd * 2 - gd, 78);
-    ctx.stroke();
-    // hand dot
+    // ── 1. Free arm – hangs on the OPPOSITE side (draw first, behind torso) ──
+    const freeShX = bodyX - gd * 5;
+    arm(freeShX, 36, freeShX - gd * 4, 56, freeShX - gd * 2, 72, 7, SK, false);
     ctx.fillStyle = SK;
-    ctx.beginPath(); ctx.arc(fx + gd * 2, 79, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(freeShX - gd * 2, 73, 4, 0, Math.PI * 2); ctx.fill();
 
-    // Legs
-    // Left
+    // ── 2. Legs ──
     ctx.fillStyle = JNS;
     ctx.beginPath();
-    ctx.moveTo(-10, 68); ctx.lineTo(-3, 68);
-    ctx.lineTo(-4, 96);  ctx.lineTo(-11, 96);
+    ctx.moveTo(bodyX - 10, 72); ctx.lineTo(bodyX - 3, 72);
+    ctx.lineTo(bodyX - 4,  98); ctx.lineTo(bodyX - 11, 98);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = JND;
-    ctx.fillRect(-11, 68, 3, 28);
-    ctx.fillRect(-5, 68, 2, 28);
-    // Right
+    ctx.fillRect(bodyX - 11, 72, 3, 26);
+    ctx.fillRect(bodyX - 5,  72, 2, 26);
     ctx.fillStyle = JNS;
     ctx.beginPath();
-    ctx.moveTo(3, 68); ctx.lineTo(10, 68);
-    ctx.lineTo(11, 96); ctx.lineTo(4, 96);
+    ctx.moveTo(bodyX + 3, 72); ctx.lineTo(bodyX + 10, 72);
+    ctx.lineTo(bodyX + 11, 98); ctx.lineTo(bodyX + 4, 98);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = JND;
-    ctx.fillRect(8, 68, 3, 28);
-    ctx.fillRect(3, 68, 2, 28);
+    ctx.fillRect(bodyX + 8, 72, 3, 26);
+    ctx.fillRect(bodyX + 3, 72, 2, 26);
 
     // Shoes
     ctx.fillStyle = SHO;
-    ctx.beginPath(); ctx.ellipse(-7, 97, 7, 4, -0.15, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(7, 97, 7, 4, 0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bodyX - 7, 99, 7, 4, -0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bodyX + 7, 99, 7, 4,  0.1, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = SHL;
-    ctx.beginPath(); ctx.ellipse(-7, 96, 5, 2, -0.15, 0, Math.PI); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(7, 96, 5, 2, 0.15, 0, Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bodyX - 7, 98, 5, 2, -0.1, 0, Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bodyX + 7, 98, 5, 2,  0.1, 0, Math.PI); ctx.fill();
 
-    // Belt / harness
+    // ── 3. Belt ──
     ctx.fillStyle = BLT;
-    ctx.beginPath(); ctx.roundRect(-11, 63, 22, 6, 3); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(bodyX - 11, 65, 22, 6, 3); ctx.fill();
     ctx.fillStyle = BLC;
-    ctx.beginPath(); ctx.roundRect(-11, 63, 5, 6, [3,0,0,3]); ctx.fill();
-    ctx.beginPath(); ctx.roundRect(6, 63, 5, 6, [0,3,3,0]); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(bodyX - 11, 65, 5, 6, [3,0,0,3]); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(bodyX +  6, 65, 5, 6, [0,3,3,0]); ctx.fill();
 
-    // Torso (sports bra back)
+    // ── 4. Torso ──
     ctx.fillStyle = BRA;
-    ctx.beginPath(); ctx.roundRect(-10, 44, 20, 20, [3,3,0,0]); ctx.fill();
-    // Lower band
+    ctx.beginPath(); ctx.roundRect(bodyX - 10, 44, 20, 22, [3,3,0,0]); ctx.fill();
     ctx.fillStyle = '#900020';
-    ctx.beginPath(); ctx.roundRect(-10, 60, 20, 4, [0,0,2,2]); ctx.fill();
-    // Cross straps
+    ctx.beginPath(); ctx.roundRect(bodyX - 10, 62, 20, 4, [0,0,2,2]); ctx.fill();
     ctx.strokeStyle = BRL; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-7, 44); ctx.lineTo(3, 61); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(7, 44); ctx.lineTo(-3, 61); ctx.stroke();
-    // Side shadows
+    ctx.beginPath(); ctx.moveTo(bodyX - 7, 44); ctx.lineTo(bodyX + 3, 63); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bodyX + 7, 44); ctx.lineTo(bodyX - 3, 63); ctx.stroke();
     ctx.fillStyle = '#9a0018';
-    ctx.fillRect(-10, 44, 3, 20);
-    ctx.fillRect(7, 44, 3, 20);
+    ctx.fillRect(bodyX - 10, 44, 3, 22);
+    ctx.fillRect(bodyX +  7, 44, 3, 22);
 
-    // Neck
-    ctx.fillStyle = SK;
-    ctx.beginPath(); ctx.roundRect(-4, 38, 8, 8, 3); ctx.fill();
+    // ── 5. Neck ──
+    ctx.strokeStyle = SK; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(gripShX, 28); ctx.lineTo(bodyX, 40); ctx.stroke();
 
-    // Head (back view)
+    // ── 6. Head (offset to OPPOSITE side from grab) ──
     ctx.fillStyle = SK;
-    ctx.beginPath(); ctx.ellipse(0, 30, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bodyX, 50, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = SKD;
-    ctx.fillRect(-10, 26, 3, 12); // left shadow
+    ctx.fillRect(bodyX + gd * 7, 46, 3, 12); // shadow on grip side of head
 
-    // Hair
+    // Hair (on top of head, strand flows DOWN away from grip arm)
     ctx.fillStyle = HRD;
-    ctx.beginPath(); ctx.ellipse(0, 22, 10, 7, 0, Math.PI, 0); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bodyX, 42, 10, 7, 0, Math.PI, 0); ctx.fill();
     ctx.fillStyle = HR;
-    ctx.beginPath(); ctx.ellipse(0, 23, 9, 5, 0, Math.PI, 0); ctx.fill();
-    // Hair strand / pony hint
+    ctx.beginPath(); ctx.ellipse(bodyX, 43, 9, 5, 0, Math.PI, 0); ctx.fill();
     ctx.strokeStyle = HR; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(6, 26); ctx.quadraticCurveTo(12, 30, 9, 38); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bodyX - gd * 3, 47);
+    ctx.quadraticCurveTo(bodyX - gd * 10, 57, bodyX - gd * 7, 70);
+    ctx.stroke();
 
-    // Raised arm (on top of everything)
-    arm(sx, 22, sx * 0.7, 12, 0, 1, 7, SK, true);
-    // Grip hand
+    // ── 7. Raised arm (front, on top) — diagonal from grip point to shoulder ──
+    arm(0, 0, gd * 3, 14, gripShX, 28, 7, SK, true);
     ctx.fillStyle = SK;
-    ctx.beginPath(); ctx.arc(0, 1, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
 
   } else {
     // ── Flying pose ──
@@ -1145,7 +1138,7 @@ function drawIntro(now) {
   ctx.font      = '12px "Space Grotesk", monospace';
   ctx.textAlign    = 'right';
   ctx.textBaseline = 'top';
-  ctx.fillText('v1.8', W - 10, 10);
+  ctx.fillText('v1.9', W - 10, 10);
   ctx.restore();
 
   // Press to start
