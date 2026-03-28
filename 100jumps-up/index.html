@@ -369,9 +369,7 @@ function update(now) {
             if (score > bestScore) bestScore = score;
           } else {
             state = 'idle';
-            // Keep only the platform just landed on, then add exactly one new target
-            platforms = platforms.filter(pp => pp === p);
-            addNextPlatform();
+            addNextPlatform(); // keep all past platforms visible, just add 1 new target
           }
           break;
         }
@@ -390,8 +388,11 @@ function update(now) {
   const targetCam = player.y - CAM_PLAYER_Y;
   if (targetCam < cameraY) cameraY = lerp(cameraY, targetCam, 0.09);
 
-  // Always keep exactly 2 platforms (current + 1 target)
-  while (platforms.length < 2) addNextPlatform();
+  // Cull platforms that are more than 1.5 screens below camera (memory safety)
+  platforms = platforms.filter(p => p.y < cameraY + H * 1.5);
+  // Ensure 1 target platform always exists above the player
+  const hasTarget = platforms.some(p => p.dir !== null && p.y < player.y - PLAYER_SIZE * 1.4);
+  if (!hasTarget) addNextPlatform();
 
   // Particles
   for (const p of particles) {
