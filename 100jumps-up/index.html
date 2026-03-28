@@ -73,7 +73,7 @@ const PLAYER_SIZE   = 28;
 const PLAT_H        = 14;
 const TARGET_JUMPS  = 100;
 const MAX_CHARGE_MS = 1800;
-const VERT_GAP_BASE = 55;
+const VERT_GAP_BASE = 70;
 const CAM_PLAYER_Y  = H * 0.65;
 
 // Difficulty scaling
@@ -109,7 +109,7 @@ function addNextPlatform() {
   const rawOffset = platOffset(safeIdx) + rand(-10, 10);
   const offset    = Math.max(25, rawOffset);
   const w         = platWidth(safeIdx);
-  const vertGap   = VERT_GAP_BASE + rand(0, 25) + Math.min(safeIdx * 0.35, 30);
+  const vertGap   = VERT_GAP_BASE + rand(0, Math.min(safeIdx * 2, 140));
   const lastCx    = last.x + last.w / 2;
   let newCx       = lastCx + dir * offset;
   newCx = Math.max(w / 2 + 18, Math.min(W - w / 2 - 18, newCx));
@@ -129,7 +129,7 @@ function reset() {
   const startW = 180, startX = W / 2 - 90, startY = 1400;
   nextPlatDir = 1;
   platforms = [{ x: startX, y: startY, w: startW, h: PLAT_H, dir: null }];
-  for (let i = 0; i < 9; i++) addNextPlatform();
+  for (let i = 0; i < 2; i++) addNextPlatform();
 
   player  = { x: W / 2 - PLAYER_SIZE / 2, y: startY - PLAYER_SIZE, vx: 0, vy: 0 };
   cameraY = player.y - CAM_PLAYER_Y;
@@ -153,8 +153,8 @@ function onRelease() {
   const power   = Math.max(0.05, charge);
   const next    = getNextPlatform();
   const dir     = next ? next.dir : 1;
-  player.vx     = dir * (1.8 + power * 0.9);
-  player.vy     = -(9.5 + power * 4.5);
+  player.vx     = dir * (1.5 + power * 1.2);
+  player.vy     = -(11 + power * 8);
   state         = 'jumping';
   charge        = 0;
 }
@@ -250,8 +250,8 @@ function update(now) {
   if (targetCam < cameraY) cameraY = lerp(cameraY, targetCam, 0.09);
 
   // Cull & generate
-  platforms = platforms.filter(p => p.y < cameraY + H + 250);
-  while (platforms.length < 11) addNextPlatform();
+  platforms = platforms.filter(p => p.y < cameraY + H + 80);
+  while (platforms.length < 3) addNextPlatform();
 
   // Particles
   for (const p of particles) {
