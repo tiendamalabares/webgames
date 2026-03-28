@@ -336,23 +336,24 @@ function drawPlatforms() {
 }
 
 function drawTrajectory() {
-  if (state !== 'charging' || charge < 0.06) return;
+  if (state !== 'charging' || charge < 0.02) return;
   const next = getNextPlatform();
   if (!next) return;
 
+  const power = Math.max(0.05, charge);
   const dir = next.dir;
-  const vx  = dir * (1.8 + charge * 7.5);
-  const vy  = -(3.5 + charge * 11);
+  const vx  = dir * (1.5 + power * 1.2);
+  const vy  = -(11 + power * 8);
   let x = player.x + PLAYER_SIZE / 2, y = player.y + PLAYER_SIZE / 2;
   let dvx = vx, dvy = vy;
 
   ctx.save();
   ctx.setLineDash([3, 8]);
-  ctx.strokeStyle = `rgba(150,180,255,${0.15 + charge * 0.2})`;
+  ctx.strokeStyle = `rgba(150,180,255,${0.15 + charge * 0.25})`;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(x, wy(y));
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 140; i++) {
     dvy += GRAVITY;
     x   += dvx;
     y   += dvy;
@@ -361,6 +362,13 @@ function drawTrajectory() {
   }
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // Landing dot
+  ctx.beginPath();
+  ctx.arc(x, wy(y), 4, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(150,180,255,${0.4 + charge * 0.4})`;
+  ctx.fill();
+
   ctx.restore();
 }
 
