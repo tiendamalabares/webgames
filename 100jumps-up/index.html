@@ -243,7 +243,12 @@ function addNextPlatform() {
   newCx = Math.max(minCx, Math.min(maxCx, newCx));
   // Y gap: widely varied 40–175px (cap at ~192px max reachable with vy=-17)
   const vertGap = rand(40, 175);
-  platforms.push({ x: newCx - w / 2, y: last.y - vertGap, w, h: PLAT_H, dir });
+  // Bright climbing-hold colours — never repeat the last colour
+  const HOLD_COLS = ['#e05828','#f0a820','#28a860','#2888d0','#9050c8','#d82878','#20b8a8','#88b820'];
+  const lastCol   = last.color || '';
+  let color = lastCol;
+  while (color === lastCol) color = HOLD_COLS[Math.floor(Math.random() * HOLD_COLS.length)];
+  platforms.push({ x: newCx - w / 2, y: last.y - vertGap, w, h: PLAT_H, dir, color });
 }
 
 // ─── Reset / init ────────────────────────────────────────────────────────────
@@ -398,6 +403,15 @@ function update(now) {
 }
 
 // ─── Draw helpers ────────────────────────────────────────────────────────────
+function lighten(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, (n >> 16) + amt);
+  const g = Math.min(255, ((n >> 8) & 0xff) + amt);
+  const b = Math.min(255, (n & 0xff) + amt);
+  return `rgb(${r},${g},${b})`;
+}
+function darken(hex, amt) { return lighten(hex, -amt); }
+
 function roundRect(x, y, w, h, r) {
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, r);
@@ -406,25 +420,28 @@ function roundRect(x, y, w, h, r) {
 
 // ─── Render ──────────────────────────────────────────────────────────────────
 function drawBg() {
-  // Deep space gradient
+  // Climbing gym wall — warm off-white
+  ctx.fillStyle = '#e4e0d6';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle wall gradient (slightly darker at bottom)
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#05050f');
-  grad.addColorStop(1, '#0d0d22');
+  grad.addColorStop(0, 'rgba(255,255,240,0.25)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.08)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Parallax stars — two layers
-  const t = (state === 'intro') ? 0 : cameraY;
-  for (let layer = 0; layer < 2; layer++) {
-    const count  = layer === 0 ? 55 : 25;
-    const speed  = layer === 0 ? 0.3 : 0.6;
-    const alpha  = layer === 0 ? 0.35 : 0.7;
-    const size   = layer === 0 ? 1 : 2;
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-    for (let i = 0; i < count; i++) {
-      const sx = (i * 173.7 + layer * 300) % W;
-      const sy = ((i * 113.1 + layer * 500 + t * speed) % (H * 3) + H * 3) % (H * 3) % H;
-      ctx.fillRect(sx, sy, size, size);
+  // Bolt-hole dot grid (like a real climbing wall)
+  const t   = (state === 'intro') ? 0 : cameraY;
+  const gap = 28;
+  ctx.fillStyle = 'rgba(80,70,55,0.22)';
+  for (let col = 0; col < W / gap + 1; col++) {
+    for (let row = -1; row < H / gap + 2; row++) {
+      const dx = col * gap + (row % 2 === 0 ? gap / 2 : 0);
+      const dy = (row * gap - (t % gap) + gap) % (H + gap * 2) - gap;
+      ctx.beginPath();
+      ctx.arc(dx, dy, 1.5, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 }
@@ -438,32 +455,31 @@ function drawPlatforms() {
     const isActive = p.dir !== null;
     const isTarget = p === next;
 
-    // Glow for target platform
+    // Pick colour: active holds are bright, inactive (already grabbed) go grey
+    const holdCol = isActive ? (p.color || '#3a9ad0') : '#b0a898';
+
+    // Pulse glow on target hold
     if (isTarget && (state === 'idle' || state === 'charging')) {
       const pulse = 0.4 + 0.3 * Math.sin(performance.now() / 400);
-      ctx.shadowColor = '#6488ff';
-      ctx.shadowBlur  = 14 * pulse;
+      ctx.shadowColor = holdCol;
+      ctx.shadowBlur  = 18 * pulse;
     }
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(p.x + 4, sy + 6, p.w, p.h);
+    // Drop shadow on wall
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath(); ctx.ellipse(p.x + p.w/2 + 3, sy + p.h + 4, p.w/2, 4, 0, 0, Math.PI*2); ctx.fill();
 
-    // Body
+    // Hold body — rounded rectangle, slightly 3-D with gradient
     const g = ctx.createLinearGradient(p.x, sy, p.x, sy + p.h);
-    if (isActive) {
-      g.addColorStop(0, isTarget ? '#7ba0ff' : '#5577ee');
-      g.addColorStop(1, isTarget ? '#4466cc' : '#2a44aa');
-    } else {
-      g.addColorStop(0, '#2e2e4e');
-      g.addColorStop(1, '#1a1a32');
-    }
+    g.addColorStop(0, lighten(holdCol, 30));
+    g.addColorStop(0.5, holdCol);
+    g.addColorStop(1, darken(holdCol, 30));
     ctx.fillStyle = g;
-    ctx.fillRect(p.x, sy, p.w, p.h);
+    ctx.beginPath(); ctx.roundRect(p.x, sy, p.w, p.h, 5); ctx.fill();
 
-    // Shine
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    ctx.fillRect(p.x + 2, sy + 1, p.w - 4, 3);
+    // Highlight stripe
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.beginPath(); ctx.roundRect(p.x + 3, sy + 2, p.w - 6, Math.floor(p.h * 0.35), 3); ctx.fill();
 
     ctx.shadowBlur = 0;
   }
@@ -483,10 +499,10 @@ function drawTrajectory() {
   let landX = x, landY = y;
 
   ctx.save();
-  ctx.shadowColor = 'rgba(160,210,255,0.8)';
-  ctx.shadowBlur  = 8;
+  ctx.shadowColor = 'rgba(40,40,0,0.3)';
+  ctx.shadowBlur  = 4;
   ctx.setLineDash([4, 7]);
-  ctx.strokeStyle = `rgba(180,220,255,${0.4 + charge * 0.6})`;
+  ctx.strokeStyle = `rgba(40,20,0,${0.25 + charge * 0.5})`;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(x, wy(y));
@@ -515,7 +531,7 @@ function drawTrajectory() {
   ctx.shadowBlur = 16;
   ctx.beginPath();
   ctx.arc(landX, wy(landY), 5, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(200,230,255,${0.6 + charge * 0.4})`;
+  ctx.fillStyle = `rgba(40,20,0,${0.4 + charge * 0.5})`;
   ctx.fill();
 
   ctx.restore();
@@ -699,7 +715,7 @@ function drawArrow() {
 
   ctx.save();
   ctx.globalAlpha = 0.3 + pulse * 0.5;
-  ctx.fillStyle   = '#aac0ff';
+  ctx.fillStyle   = 'rgba(60,40,20,0.7)';
   ctx.font        = 'bold 20px "Space Grotesk", monospace';
   ctx.textAlign   = dir === 1 ? 'left' : 'right';
   ctx.textBaseline = 'middle';
@@ -711,7 +727,7 @@ function drawParticles() {
   ctx.save();
   for (const p of particles) {
     ctx.globalAlpha = p.life;
-    ctx.fillStyle   = `hsl(${p.hue},70%,65%)`;
+    ctx.fillStyle   = `hsl(${p.hue},75%,40%)`;
     ctx.fillRect(p.x - p.size / 2, wy(p.y) - p.size / 2, p.size, p.size);
   }
   ctx.restore();
@@ -719,37 +735,41 @@ function drawParticles() {
 
 function drawHUD() {
   // Top bar background
-  ctx.fillStyle = 'rgba(5,5,20,0.8)';
+  ctx.fillStyle = 'rgba(228,224,214,0.92)';
   ctx.fillRect(0, 0, W, 58);
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 57, W, 1);
 
   // JUMPS label
-  ctx.fillStyle = 'rgba(100,136,255,0.7)';
+  ctx.fillStyle = 'rgba(80,60,40,0.7)';
   ctx.font      = '11px "Space Grotesk", monospace';
   ctx.fillText('JUMPS', 16, 18);
 
   // Count
-  ctx.fillStyle = 'white';
+  ctx.fillStyle = '#1a1008';
   ctx.font      = 'bold 26px "Space Grotesk", monospace';
   ctx.fillText(`${score}`, 16, 44);
 
   // /100
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillStyle = 'rgba(60,40,20,0.35)';
   ctx.font      = '14px "Space Grotesk", monospace';
   ctx.fillText(`/ ${TARGET_JUMPS}`, 16 + ctx.measureText(`${score}`).width + 5, 44);
 
   // Progress bar
   const bx = 16, by = 50, bw = W - 32, bh = 4;
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillStyle = 'rgba(0,0,0,0.10)';
   ctx.fillRect(bx, by, bw, bh);
   const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-  pg.addColorStop(0, '#5577ff');
-  pg.addColorStop(1, '#88ffcc');
+  pg.addColorStop(0, '#e05828');
+  pg.addColorStop(0.5, '#f0a820');
+  pg.addColorStop(1, '#28a860');
   ctx.fillStyle = pg;
   ctx.fillRect(bx, by, bw * (score / TARGET_JUMPS), bh);
 
   // Best score (top right)
   if (bestScore > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillStyle = 'rgba(60,40,20,0.35)';
     ctx.font      = '11px "Space Grotesk", monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`BEST  ${bestScore}`, W - 14, 18);
@@ -761,7 +781,7 @@ function drawHUD() {
     const next = getNextPlatform();
     if (next) {
       const lbl = next.dir === 1 ? '▶  JUMP RIGHT' : 'JUMP LEFT  ◀';
-      ctx.fillStyle  = 'rgba(100,136,255,0.65)';
+      ctx.fillStyle  = 'rgba(60,40,20,0.55)';
       ctx.font       = 'bold 12px "Space Grotesk", monospace';
       ctx.textAlign  = 'center';
       ctx.fillText(lbl, W / 2, H - 14);
@@ -796,7 +816,7 @@ function drawIntro(now) {
   ctx.textBaseline = 'middle';
   ctx.fillText('100', 0, -30);
 
-  ctx.fillStyle = 'white';
+  ctx.fillStyle = '#1a1008';
   ctx.font      = 'bold 36px "Space Grotesk", monospace';
   ctx.fillText('JUMPS UP', 0, 40);
 
@@ -815,12 +835,12 @@ function drawIntro(now) {
   ctx.fillRect(demoX + 18, demoY + 10, 4, 4);
 
   // Platform below demo player
-  ctx.fillStyle = '#5577ee';
-  ctx.fillRect(W / 2 - 60, H / 2 + 114, 120, 14);
+  ctx.fillStyle = '#e05828';
+  ctx.beginPath(); ctx.roundRect(W / 2 - 60, H / 2 + 114, 120, 14, 5); ctx.fill();
 
   // Press to start
   const a = 0.5 + 0.5 * Math.sin(now / 500);
-  ctx.fillStyle = `rgba(255,255,255,${a})`;
+  ctx.fillStyle = `rgba(40,20,0,${0.4 + a * 0.4})`;
   ctx.font      = 'bold 15px "Space Grotesk", monospace';
   ctx.textAlign = 'center';
   ctx.fillText('PRESS SPACE  or  TAP  to start', W / 2, H - 50);
@@ -828,7 +848,7 @@ function drawIntro(now) {
 
   // Best score
   if (bestScore > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillStyle = 'rgba(40,20,0,0.4)';
     ctx.font      = '13px "Space Grotesk", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(`Best: ${bestScore} jumps`, W / 2, H - 24);
@@ -840,28 +860,28 @@ function drawIntro(now) {
 function drawOverlay() {
   if (state !== 'dead' && state !== 'win') return;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillStyle = 'rgba(228,224,214,0.88)';
   ctx.fillRect(0, 0, W, H);
 
   ctx.textAlign = 'center';
 
   if (state === 'dead') {
-    ctx.fillStyle = '#e74c3c';
+    ctx.fillStyle = '#c82020';
     ctx.font      = 'bold 52px "Space Grotesk", monospace';
     ctx.fillText('GAME OVER', W / 2, H / 2 - 44);
 
-    ctx.fillStyle = 'white';
+    ctx.fillStyle = '#1a1008';
     ctx.font      = '22px "Space Grotesk", monospace';
     ctx.fillText(`${score} jump${score !== 1 ? 's' : ''} up`, W / 2, H / 2 + 10);
 
     if (score > 0 && score === bestScore) {
-      ctx.fillStyle = '#f1c40f';
+      ctx.fillStyle = '#d09000';
       ctx.font      = 'bold 16px "Space Grotesk", monospace';
       ctx.fillText('★  NEW BEST  ★', W / 2, H / 2 + 46);
     }
 
     const a = 0.4 + 0.3 * Math.sin(performance.now() / 500);
-    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    ctx.fillStyle = `rgba(40,20,0,${0.4 + a * 0.35})`;
     ctx.font      = '14px "Space Grotesk", monospace';
     ctx.fillText('SPACE / TAP to try again', W / 2, H / 2 + 84);
   }
