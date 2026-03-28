@@ -162,6 +162,11 @@
     <input type="range" id="sl-wshrink" min="0" max="3" step="0.05" value="0.75">
   </div>
 
+  <div class="cfg-row" style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
+    <label style="margin:0">Línea trayectoria</label>
+    <input type="checkbox" id="sl-traj" style="width:18px;height:18px;accent-color:#6488ff;cursor:pointer;touch-action:auto">
+  </div>
+
   <button class="cfg-reset" id="cfg-reset-btn">↺ Valores por defecto</button>
 </div>
 
@@ -199,6 +204,7 @@ let WIDTH_BASE    = 80;
 let WIDTH_SHRINK  = 0.75;
 let WIDTH_MIN     = 10;
 let MAX_VX        = 3.5;
+let SHOW_TRAJ     = false;          // trajectory line off by default
 
 // ─── State ───────────────────────────────────────────────────────────────────
 // states: 'intro' | 'idle' | 'charging' | 'jumping' | 'dead' | 'win'
@@ -457,7 +463,7 @@ function drawPlatforms() {
 }
 
 function drawTrajectory() {
-  if (state !== 'charging') return;
+  if (!SHOW_TRAJ || state !== 'charging') return;
   const next = getNextPlatform();
   if (!next) return;
 
@@ -845,6 +851,10 @@ requestAnimationFrame(loop);
       apply(v);
     });
   }
+
+  document.getElementById('sl-traj').addEventListener('change', e => {
+    SHOW_TRAJ = e.target.checked;
+  });
 
   bind('charge',  'charge',  v => { MAX_CHARGE_MS = v; },       v => v);
   bind('vx',      'vx',      v => { MAX_VX        = v; },       v => v.toFixed(1));
