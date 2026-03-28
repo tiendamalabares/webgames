@@ -1007,11 +1007,13 @@ function drawIntro(now) {
   ctx.beginPath(); ctx.roundRect(W / 2 - 60, H / 2 + 114, 120, 14, 5); ctx.fill();
 
   // Version
-  ctx.fillStyle = 'rgba(40,20,0,0.28)';
-  ctx.font      = '11px "Space Grotesk", monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText('v1.4', W - 10, 18);
-  ctx.textAlign = 'left';
+  ctx.save();
+  ctx.fillStyle = 'rgba(40,20,0,0.50)';
+  ctx.font      = '12px "Space Grotesk", monospace';
+  ctx.textAlign    = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText('v1.5', W - 10, 10);
+  ctx.restore();
 
   // Press to start
   const a = 0.5 + 0.5 * Math.sin(now / 500);
