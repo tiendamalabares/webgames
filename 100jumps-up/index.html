@@ -442,6 +442,66 @@ function seededRand(seed) {
   return s / 0x7fffffff;
 }
 
+// ─── Logo mural ──────────────────────────────────────────────────────────────
+// Three overlapping mountain triangles painted on the gym wall,
+// tiled every LOGO_TILE world units so the player sees it throughout the climb.
+const LOGO_TILE  = 700;
+const LOGO_START = 1300;   // first tile world-Y base (above start platform)
+
+function drawLogoMural() {
+  const t = state === 'intro' ? 0 : cameraY;
+  const firstTile = Math.floor((t - H) / LOGO_TILE);
+  const lastTile  = Math.ceil((t + H) / LOGO_TILE);
+
+  for (let tile = firstTile; tile <= lastTile; tile++) {
+    const worldBaseY = LOGO_START - tile * LOGO_TILE;
+    const baseY = worldBaseY - t;
+    if (baseY < -290 || baseY > H + 60) continue;
+
+    ctx.save();
+    ctx.globalAlpha = 0.40;
+
+    const cx = W / 2;
+    // Triangles: [colour, tipX, tipY, baseLeft, baseRight]
+    const tri = [
+      ['#6848b8', cx + W*0.21, baseY - 200, cx - W*0.04, cx + W*0.44], // right (purple, behind)
+      ['#2888b0', cx - W*0.21, baseY - 182, cx - W*0.44, cx + W*0.04], // left  (teal)
+      ['#c87020', cx,          baseY - 228, cx - W*0.26, cx + W*0.26], // centre (orange, front)
+    ];
+
+    for (const [col, tx, ty, bl, br] of tri) {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(bl, baseY);
+      ctx.lineTo(br, baseY);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // White polka dots — stored as [triIdx, tFrac(0=tip,1=base), uFrac(0=left,1=right)]
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    const dots = [
+      [1, 0.40, 0.55], [1, 0.63, 0.28], [1, 0.76, 0.68], [1, 0.88, 0.48],
+      [2, 0.28, 0.50], [2, 0.52, 0.30], [2, 0.52, 0.70], [2, 0.72, 0.50],
+      [2, 0.86, 0.28], [2, 0.86, 0.72],
+      [0, 0.38, 0.44], [0, 0.62, 0.66], [0, 0.76, 0.34], [0, 0.88, 0.56],
+    ];
+    for (const [ti, tf, uf] of dots) {
+      const [, tx, ty, bl, br] = tri[ti];
+      const lx = tx + (bl - tx) * tf;
+      const rx = tx + (br - tx) * tf;
+      const dx = lx + (rx - lx) * uf;
+      const dy = ty + (baseY - ty) * tf;
+      ctx.beginPath();
+      ctx.arc(dx, dy, 7 + tf * 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
 function drawBgHolds() {
   const ROW_H = 52, COLS = 9;
   const t     = state === 'intro' ? 0 : cameraY;
@@ -1004,6 +1064,7 @@ function loop(now) {
   if (sx || sy) ctx.translate(sx, sy);
 
   drawBg();
+  drawLogoMural();
   drawBgHolds();
   drawPlatforms();
   drawParticles();
