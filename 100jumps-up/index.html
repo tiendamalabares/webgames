@@ -212,6 +212,7 @@ let state, player, platforms, score, charge, chargeStart;
 let spaceHeld, cameraY, camTarget, camSliding, particles, shakeAmt, bestScore = 0;
 let introAnim = 0; // for intro screen animation
 let nextPlatDir = 1; // alternates ±1 independently of array length
+let lives, centerStreak, lastSpawnX, lastSpawnY, toasts;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const platWidth  = i => Math.max(WIDTH_MIN,  WIDTH_BASE  - i * WIDTH_SHRINK);
@@ -263,6 +264,9 @@ function reset() {
   score      = 0;
   particles  = [];
   shakeAmt   = 0;
+  lives        = 2;
+  centerStreak = 0;
+  toasts       = [];
 
   const startW = 180, startX = W / 2 - 90, startY = 1400;
   nextPlatDir = 1;
@@ -271,6 +275,8 @@ function reset() {
 
   // player.y = hand position (grabs platform TOP edge, body hangs below)
   player  = { x: W / 2 - PLAYER_SIZE / 2, y: startY, vx: 0, vy: 0, grabDir: 1 };
+  lastSpawnX = player.x;
+  lastSpawnY = player.y;
   cameraY   = player.y - CAM_PLAYER_Y;
   camTarget = cameraY;
   camSliding = false;
@@ -368,6 +374,22 @@ function update(now) {
           shakeAmt = 5;
           p.dir = null;
 
+          // Center landing detection (within central 40% of platform)
+          const playerCx = player.x + PLAYER_SIZE / 2;
+          const platCx   = p.x + p.w / 2;
+          if (Math.abs(playerCx - platCx) < p.w * 0.20) {
+            centerStreak++;
+            toasts.push({ text: '¡CENTRO!', life: 1, color: '#f0c030', x: playerCx, y: p.y - 20 });
+            if (centerStreak % 3 === 0) {
+              lives++;
+              toasts.push({ text: '♥ +1 VIDA', life: 1, color: '#e03878', x: playerCx, y: p.y - 44 });
+            }
+          } else {
+            centerStreak = 0;
+          }
+          lastSpawnX = player.x;
+          lastSpawnY = player.y;
+
           if (score >= TARGET_JUMPS) {
             state = 'win';
             if (score > bestScore) bestScore = score;
@@ -385,8 +407,21 @@ function update(now) {
     if (player.y > cameraY + H + 140 ||
         player.x + PLAYER_SIZE < -30 ||
         player.x > W + 30) {
-      if (score > bestScore) bestScore = score;
-      state = 'dead';
+      if (lives > 0) {
+        lives--;
+        centerStreak = 0;
+        toasts.push({ text: `♥ VIDA USADA · ${lives} restante${lives !== 1 ? 's' : ''}`, life: 1.4, color: '#c02020', x: W / 2, y: H / 2 });
+        player.x  = lastSpawnX;
+        player.y  = lastSpawnY;
+        player.vx = 0; player.vy = 0;
+        state     = 'idle';
+        camTarget  = player.y - CAM_PLAYER_Y;
+        cameraY    = camTarget;
+        camSliding = false;
+      } else {
+        if (score > bestScore) bestScore = score;
+        state = 'dead';
+      }
     }
   }
 
@@ -410,6 +445,10 @@ function update(now) {
     p.vy += 0.12; p.life -= p.decay;
   }
   particles = particles.filter(p => p.life > 0);
+
+  // Toasts
+  for (const t of toasts) { t.life -= 0.022; t.y -= 0.6; }
+  toasts = toasts.filter(t => t.life > 0);
 
   if (shakeAmt > 0) shakeAmt *= 0.7;
 }
@@ -901,6 +940,35 @@ function drawParticles() {
   ctx.restore();
 }
 
+function drawToasts() {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const t of toasts) {
+    const alpha = Math.min(1, t.life * 2);
+    const screenY = t.y - (state === 'intro' ? 0 : cameraY);
+    ctx.globalAlpha = alpha;
+    ctx.font = 'bold 16px "Space Grotesk", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillText(t.text, t.x + 1, screenY + 1);
+    ctx.fillStyle = t.color;
+    ctx.fillText(t.text, t.x, screenY);
+  }
+  ctx.restore();
+}
+
+function drawLives() {
+  const sy = 18;
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  ctx.font = '15px "Space Grotesk", monospace';
+  for (let i = 0; i < lives; i++) {
+    ctx.fillStyle = '#e03878';
+    ctx.fillText('♥', W / 2 - (lives - 1) * 11 + i * 22, sy);
+  }
+  ctx.restore();
+}
+
 function drawHUD() {
   // Top bar background
   ctx.fillStyle = 'rgba(228,224,214,0.92)';
@@ -1012,7 +1080,7 @@ function drawIntro(now) {
   ctx.font      = '12px "Space Grotesk", monospace';
   ctx.textAlign    = 'right';
   ctx.textBaseline = 'top';
-  ctx.fillText('v1.5', W - 10, 10);
+  ctx.fillText('v1.6', W - 10, 10);
   ctx.restore();
 
   // Press to start
@@ -1105,7 +1173,9 @@ function loop(now) {
   drawArrow();
   drawChargeBar();
   drawPlayer();
+  drawToasts();
   drawHUD();
+  drawLives();
   drawOverlay();
 
   ctx.restore();
