@@ -348,9 +348,11 @@ function drawTrajectory() {
   let dvx = vx, dvy = vy;
 
   ctx.save();
-  ctx.setLineDash([3, 8]);
-  ctx.strokeStyle = `rgba(150,180,255,${0.15 + charge * 0.25})`;
-  ctx.lineWidth = 1.5;
+  ctx.shadowColor = 'rgba(160,210,255,0.8)';
+  ctx.shadowBlur  = 8;
+  ctx.setLineDash([4, 7]);
+  ctx.strokeStyle = `rgba(180,220,255,${0.5 + charge * 0.5})`;
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(x, wy(y));
   for (let i = 0; i < 140; i++) {
@@ -364,9 +366,10 @@ function drawTrajectory() {
   ctx.setLineDash([]);
 
   // Landing dot
+  ctx.shadowBlur = 14;
   ctx.beginPath();
-  ctx.arc(x, wy(y), 4, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(150,180,255,${0.4 + charge * 0.4})`;
+  ctx.arc(x, wy(y), 5, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(200,230,255,${0.7 + charge * 0.3})`;
   ctx.fill();
 
   ctx.restore();
