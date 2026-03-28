@@ -470,57 +470,53 @@ function drawLogoMural() {
     ctx.save();
     ctx.globalAlpha = 0.40;
 
+    // Logo defined in local coords: X ∈ [15,95], Y ∈ [0,95] (Y=0 = base/floor)
+    // Canvas mapping: lx(x) = cx + (x-55)*S,  ly(y) = baseY - y*S
+    const S  = Math.min(W * 0.60 / 80, 2.8); // scale so logo ~60% of canvas width
+    const ox = 55;                             // local X center of logo
     const cx = W / 2;
-    // 5 overlapping triangular polygons forming a crown/mountain logo
-    // Draw order: back→front so front shapes cover back ones
-    // [colour, tipX, tipY, baseLeft, baseRight]
-    const tri = [
-      // 1. Dark purple — right outer (widest, behind)
-      ['#5840a8', cx + W*0.16, baseY - 178, cx - W*0.01, cx + W*0.28],
-      // 2. Dark teal — left outer (widest, behind)
-      ['#2878a8', cx - W*0.16, baseY - 178, cx - W*0.28, cx + W*0.01],
-      // 3. Lavender — right narrow spike (tall, in front of purple)
-      ['#a090c8', cx + W*0.085, baseY - 232, cx + W*0.00, cx + W*0.18],
-      // 4. Sky blue — left narrow spike (tall, in front of teal)
-      ['#78b8d8', cx - W*0.085, baseY - 232, cx - W*0.18, cx - W*0.00],
-      // 5. Orange — center (tallest, front)
-      ['#c8782a', cx,           baseY - 250, cx - W*0.13, cx + W*0.13],
-    ];
+    const lx = x => cx + (x - ox) * S;
+    const ly = y => baseY - y * S;
 
-    for (const [col, tx, ty, bl, br] of tri) {
+    function poly(pts, col) {
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.moveTo(tx, ty);
-      ctx.lineTo(bl, baseY);
-      ctx.lineTo(br, baseY);
+      ctx.moveTo(lx(pts[0][0]), ly(pts[0][1]));
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(lx(pts[i][0]), ly(pts[i][1]));
       ctx.closePath();
       ctx.fill();
     }
 
-    // White polka dots inside each triangle
-    // [triIdx, tFrac(0=tip→1=base), uFrac(0=left→1=right)]
+    // Draw shapes 1→5 in order (1 = back, 5 = front where they overlap)
+    // Shape 1: Azul Petróleo — inclined triangle
+    poly([[30,75],[15,0],[45,0]], '#2878a8');
+    // Shape 2: Azul Cielo — very thin tall trapezoid
+    poly([[50,85],[51,84],[47,0],[43,0]], '#78b8d8');
+    // Shape 3: Naranja — inclined trapezoid
+    poly([[52,72],[54,71],[65,0],[50,0]], '#c8782a');
+    // Shape 4: Morado — very inclined trapezoid (tallest)
+    poly([[53,95],[54,93],[73,0],[62,0]], '#a090c8');
+    // Shape 5: Azul Índigo — irregular pentagon
+    poly([[68,77],[83,70],[95,0],[75,0]], '#5840a8');
+
+    // White polka dots — defined in same local coords [x, y]
     ctx.fillStyle = 'rgba(255,255,255,0.82)';
     const dots = [
-      // dark purple (0)
-      [0, 0.38, 0.32], [0, 0.58, 0.55], [0, 0.72, 0.28], [0, 0.82, 0.60],
-      // dark teal (1)
-      [1, 0.38, 0.68], [1, 0.58, 0.45], [1, 0.72, 0.72], [1, 0.82, 0.40],
-      // lavender (2)
-      [2, 0.35, 0.48], [2, 0.58, 0.30], [2, 0.72, 0.65],
-      // sky blue (3)
-      [3, 0.35, 0.52], [3, 0.58, 0.70], [3, 0.72, 0.35],
-      // orange (4)
-      [4, 0.28, 0.50], [4, 0.48, 0.28], [4, 0.48, 0.72],
-      [4, 0.68, 0.50], [4, 0.82, 0.28], [4, 0.82, 0.72],
+      // Shape 1 (teal triangle)
+      [23,12],[35,10],[20,30],[38,28],[26,52],[40,48],
+      // Shape 2 (sky blue thin spike — few small dots along height)
+      [46,22],[47.5,50],[50.5,75],
+      // Shape 3 (orange trapezoid)
+      [55,14],[61,12],[53,38],[63,34],[53.5,60],
+      // Shape 4 (purple tall spike)
+      [64,18],[70,16],[65,42],[67,40],[53.5,78],[53.8,90],
+      // Shape 5 (indigo pentagon)
+      [79,14],[89,11],[77,38],[85,35],[73,62],
     ];
-    for (const [ti, tf, uf] of dots) {
-      const [, tx, ty, bl, br] = tri[ti];
-      const lx = tx + (bl - tx) * tf;
-      const rx = tx + (br - tx) * tf;
-      const dx = lx + (rx - lx) * uf;
-      const dy = ty + (baseY - ty) * tf;
+    for (const [dx, dy] of dots) {
+      const r = 3 + (dy / 95) * 4; // dots grow slightly toward base
       ctx.beginPath();
-      ctx.arc(dx, dy, 6 + tf * 5, 0, Math.PI * 2);
+      ctx.arc(lx(dx), ly(dy), r, 0, Math.PI * 2);
       ctx.fill();
     }
 
