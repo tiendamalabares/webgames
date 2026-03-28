@@ -522,124 +522,139 @@ function drawTrajectory() {
 
 function drawPlayer() {
   const cx  = Math.round(player.x + PLAYER_SIZE / 2);
-  const gy  = Math.round(wy(player.y));   // hand / grab y on screen
-  const gd  = player.grabDir || 1;        // which side the grabbing hand is on
-  const isFlying  = state === 'jumping';
-  const isFalling = isFlying && player.vy > 3;
+  const gy  = Math.round(wy(player.y));   // grab point Y on screen
+  const gd  = player.grabDir || 1;
+  const isFlying = state === 'jumping';
 
   ctx.save();
+  ctx.translate(cx, gy);
 
-  if (isFlying) {
-    // ── Flying pose ──
-    // Rotate body slightly by velocity angle
-    const angle = Math.atan2(player.vy, player.vx) * 0.35;
-    ctx.translate(cx, gy + 14);
-    ctx.rotate(angle);
+  // Each "pixel" = 2×2 screen pixels for pixel-art look
+  const S = 2;
+  function px(x, y, w, h, c) {
+    ctx.fillStyle = c;
+    ctx.fillRect(x * S, y * S, w * S, h * S);
+  }
 
-    // Legs kicked back
-    ctx.strokeStyle = '#1a1050';
-    ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-3, 8); ctx.lineTo(-6, 18);
-    ctx.moveTo( 3, 8); ctx.lineTo( 6, 18);
-    ctx.stroke();
+  // Colour palette (reference: back-view rock climber)
+  const SK  = '#f0c898'; // skin
+  const SKD = '#c89060'; // skin shadow
+  const HR  = '#d8b020'; // blonde hair
+  const HRD = '#a08010'; // hair dark
+  const BRA = '#d82040'; // pink sports bra
+  const BRL = '#f04468'; // bra highlight
+  const JNS = '#3a70b8'; // jeans blue
+  const JND = '#2a5090'; // jeans dark
+  const BLT = '#7a5420'; // harness/belt
+  const BLD = '#4a3010'; // belt buckle dark
+  const SHO = '#181420'; // shoes
 
-    // Body (shirt)
-    ctx.fillStyle = isFalling ? '#cc3322' : '#2255cc';
-    ctx.beginPath(); ctx.ellipse(0, 0, 7, 10, 0, 0, Math.PI * 2); ctx.fill();
+  if (!isFlying) {
+    // ── Hanging pose (back view, one arm raised to grab point) ──
+    // Arm from grab point (0,0) downward — disappears behind platform top,
+    // emerges at platform bottom (PLAT_H/S = 7 sprite-px below).
+    // gd: +1 = right arm up, -1 = left arm up
+    const armX = gd;          // centre offset of raised arm (sprite px from 0)
+    px(armX-1,  0,  2, 10, SK);    // raised arm (forearm + upper arm)
+    px(armX + (gd > 0 ? 0 : -1), 0, 1, 10, SKD); // arm shadow
 
-    // Head
-    ctx.fillStyle = '#f4a66a';
-    ctx.beginPath(); ctx.arc(0, -14, 8, 0, Math.PI * 2); ctx.fill();
-    // Hair
-    ctx.fillStyle = '#3a2010';
-    ctx.beginPath(); ctx.arc(0, -17, 8, Math.PI, 0); ctx.fill();
-    // Eyes — wide open
-    ctx.fillStyle = 'white';
-    ctx.fillRect(-5, -16, 4, 5); ctx.fillRect(2, -16, 4, 5);
-    ctx.fillStyle = '#111';
-    ctx.fillRect(isFalling ? -4 : -4, -15, 3, 3);
-    ctx.fillRect(isFalling ?  3 :  3, -15, 3, 3);
-    // Open mouth (surprise/effort)
-    ctx.fillStyle = '#111';
-    ctx.beginPath(); ctx.arc(0, -9, 2.5, 0, Math.PI * 2); ctx.fill();
+    // Hair (visible at shoulder height, back of head)
+    px(-3,  8,  6,  2, HRD);
+    px(-3,  9,  6,  2, HR);
 
-    // Arms spread — one let go, one reaching
-    const nextDir = player.vx > 0 ? 1 : -1;
-    ctx.strokeStyle = '#f4a66a'; ctx.lineWidth = 3;
-    // Let-go arm (side jumped from)
-    ctx.beginPath();
-    ctx.moveTo(-gd * 7, -5); ctx.lineTo(-gd * 18, -12); ctx.stroke();
-    // Reaching arm (toward platform)
-    ctx.beginPath();
-    ctx.moveTo(gd * 7, -5); ctx.lineTo(gd * 20, -14); ctx.stroke();
-    // Fist on reaching arm
-    ctx.fillStyle = '#f4a66a';
-    ctx.beginPath(); ctx.arc(gd * 20, -14, 3, 0, Math.PI * 2); ctx.fill();
+    // Head (back view — no face, just rounded shape + hair)
+    px(-3, 11,  6,  5, SK);
+    px(-3, 11,  1,  5, SKD);
+    px( 2, 11,  1,  5, SKD);
+
+    // Neck
+    px(-1, 16,  2,  2, SK);
+
+    // Torso — pink sports bra, back view with cross straps
+    px(-4, 18,  8, 10, BRA);
+    px(-4, 18,  1, 10, '#9a0020');  // left shadow
+    px( 3, 18,  1, 10, '#9a0020');  // right shadow
+    px(-1, 18,  1,  5, BRL);        // cross strap L
+    px( 0, 18,  1,  5, BRL);        // cross strap R
+    px(-3, 24,  6,  4, '#b01030');  // lower back
+
+    // Free arm (hanging down, opposite side)
+    const hx = gd > 0 ? -6 : 4;
+    px(hx,    18,  2,  7, SK);   // upper arm
+    px(hx,    18,  1,  7, SKD);
+    px(hx+1,  25,  2,  7, SK);   // forearm
+    px(hx+1,  25,  1,  7, SKD);
+
+    // Harness / belt
+    px(-5, 28, 10,  2, BLT);
+    px(-4, 30,  8,  1, BLD);
+    px(-5, 28,  2,  2, BLD);    // left clip
+    px( 3, 28,  2,  2, BLD);    // right clip
+
+    // Legs — 3/4 capri jeans
+    px(-5, 31,  4, 12, JNS);
+    px( 1, 31,  4, 12, JNS);
+    px(-5, 31,  1, 12, JND);    // outer shadow L
+    px(-2, 31,  1, 12, JND);    // inner gap
+    px( 1, 31,  1, 12, JND);    // inner gap
+    px( 4, 31,  1, 12, JND);    // outer shadow R
+
+    // Shoes (dark climbing shoes)
+    px(-6, 43,  5,  2, SHO);
+    px( 1, 43,  5,  2, SHO);
+    px(-5, 45,  3,  1, SHO);
+    px( 2, 45,  3,  1, SHO);
 
   } else {
-    // ── Hanging pose ──
-    const handX = cx + gd * 5;
-    const next  = getNextPlatform();
-    const nd    = next ? next.dir : -gd;  // direction toward next platform
-
-    // Grabbing arm (up to platform)
-    ctx.strokeStyle = '#f4a66a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(handX, gy); ctx.lineTo(cx - gd * 2, gy + 12); ctx.stroke();
-    // Fist on grip
-    ctx.fillStyle = '#f4a66a';
-    ctx.beginPath(); ctx.arc(handX, gy, 3.5, 0, Math.PI * 2); ctx.fill();
-
-    // Free arm (points toward next platform, animated when charging)
-    const armPulse = state === 'charging' ? Math.sin(performance.now() / 120) * 3 : 0;
-    ctx.strokeStyle = '#f4a66a'; ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(cx - gd * 2, gy + 12);
-    ctx.lineTo(cx + nd * 15, gy + 8 + armPulse);
-    ctx.stroke();
-    ctx.fillStyle = '#f4a66a';
-    ctx.beginPath(); ctx.arc(cx + nd * 15, gy + 8 + armPulse, 3, 0, Math.PI * 2); ctx.fill();
+    // ── Flying pose (launched, body slightly rotated by velocity) ──
+    const angle = Math.atan2(player.vy, player.vx) * 0.35;
+    // Pivot around body centre (~18 sp below grab point)
+    ctx.translate(0, 18 * S);
+    ctx.rotate(angle);
 
     // Head
-    ctx.fillStyle = '#f4a66a';
-    ctx.beginPath(); ctx.arc(cx, gy + 20, 8, 0, Math.PI * 2); ctx.fill();
-    // Hair
-    ctx.fillStyle = '#3a2010';
-    ctx.beginPath(); ctx.arc(cx, gy + 16, 8, Math.PI, 0); ctx.fill();
-    // Eyes
-    const ey = gy + 19;
-    ctx.fillStyle = 'white';
-    ctx.fillRect(cx - 5, ey, 4, 4); ctx.fillRect(cx + 2, ey, 4, 4);
-    ctx.fillStyle = '#111';
-    ctx.fillRect(cx - 4, ey + 1, 2, 2); ctx.fillRect(cx + 3, ey + 1, 2, 2);
-    // Expression
-    ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (state === 'charging') {
-      // Determined — straight line
-      ctx.moveTo(cx - 3, ey + 6); ctx.lineTo(cx + 3, ey + 6);
-    } else {
-      // Relaxed smile
-      ctx.arc(cx, ey + 4, 3, 0.1, Math.PI - 0.1);
-    }
-    ctx.stroke();
+    px(-3, -16,  6,  2, HRD);  // hair dark
+    px(-3, -14,  6,  2, HR);   // hair
+    px(-3, -12,  6,  5, SK);   // head
+    px(-3, -12,  1,  5, SKD);
+    px( 2, -12,  1,  5, SKD);
 
-    // Body (shirt)
-    ctx.fillStyle = '#2255cc';
-    ctx.beginPath(); ctx.roundRect(cx - 6, gy + 28, 12, 9, 2); ctx.fill();
-    // Pants
-    ctx.fillStyle = '#1a1050';
-    ctx.beginPath(); ctx.roundRect(cx - 5, gy + 36, 10, 7, 1); ctx.fill();
-    // Legs dangling
-    ctx.strokeStyle = '#1a1050'; ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(cx - 2, gy + 43); ctx.lineTo(cx - 5, gy + 53);
-    ctx.moveTo(cx + 2, gy + 43); ctx.lineTo(cx + 5, gy + 53);
-    ctx.stroke();
+    // Neck
+    px(-1,  -7,  2,  2, SK);
+
+    // Torso
+    px(-4,  -5,  8,  9, BRA);
+    px(-4,  -5,  1,  9, '#9a0020');
+    px( 3,  -5,  1,  9, '#9a0020');
+    px(-1,  -5,  2,  4, BRL);
+
+    // Belt
+    px(-5,   4, 10,  2, BLT);
+
+    // Legs (slightly trailing behind body when flying)
+    px(-5,   6,  4, 11, JNS);
+    px( 1,   6,  4, 11, JNS);
+    px(-5,   6,  1, 11, JND);
+    px(-2,   6,  1, 11, JND);
+    px( 1,   6,  1, 11, JND);
+    px( 4,   6,  1, 11, JND);
+
     // Shoes
-    ctx.fillStyle = '#882222';
-    ctx.fillRect(cx - 9, gy + 52, 7, 4);
-    ctx.fillRect(cx + 2, gy + 52, 7, 4);
+    px(-6,  17,  5,  2, SHO);
+    px( 1,  17,  5,  2, SHO);
+
+    // Arms drawn in screen-space (un-rotate) so they point in real directions
+    ctx.rotate(-angle);
+    // Reaching arm (toward next platform — upward)
+    const ax = gd;
+    px(ax*3-1, -28,  2, 12, SK);
+    px(ax*3 + (gd > 0 ? 0 : -1), -28, 1, 12, SKD);
+    // Trailing / released arm
+    const tx = gd > 0 ? -7 : 5;
+    px(tx,    -5,  2,  8, SK);
+    px(tx,    -5,  1,  8, SKD);
+    px(tx+1,   3,  2,  6, SK);
+    px(tx+1,   3,  1,  6, SKD);
   }
 
   ctx.restore();
@@ -679,7 +694,7 @@ function drawArrow() {
   const dir   = next.dir;
   const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 350);
   const ax    = dir === 1 ? player.x + PLAYER_SIZE + 10 : player.x - 10;
-  const ay    = wy(player.y) + PLAYER_SIZE / 2 + 2;
+  const ay    = wy(player.y) + 70;  // below character feet (char ~90px tall)
 
   ctx.save();
   ctx.globalAlpha = 0.3 + pulse * 0.5;
