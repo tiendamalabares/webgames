@@ -242,7 +242,7 @@ function addNextPlatform() {
   let newCx     = lastCx + dir * offset;
   newCx = Math.max(minCx, Math.min(maxCx, newCx));
   // Gap varies widely around base value: 30%–140% of VERT_GAP
-  const vertGap = VERT_GAP * rand(0.3, 1.4);
+  const vertGap = Math.min(175, VERT_GAP * rand(0.3, 1.4)); // cap at reachable height (vy=-17, g=0.75 → max ~192px)
   platforms.push({ x: newCx - w / 2, y: last.y - vertGap, w, h: PLAT_H, dir });
 }
 
@@ -284,7 +284,7 @@ function onRelease() {
   const next    = getNextPlatform();
   const dir     = next ? next.dir : 1;
   player.vx     = dir * charge * MAX_VX;
-  player.vy     = -(10 + charge * 9);  // charge controls height too
+  player.vy     = -17;                 // fixed height, only horizontal varies
   state         = 'jumping';
   charge        = 0;
 }
@@ -477,7 +477,7 @@ function drawTrajectory() {
 
   const dir = next.dir;
   const vx  = dir * charge * MAX_VX;      // same as onRelease
-  const vy  = -(10 + charge * 9);         // same as onRelease
+  const vy  = -17;                         // same as onRelease (fixed height)
   let x = player.x + PLAYER_SIZE / 2;
   let y = player.y;                        // hand position (top of character)
   let dvx = vx, dvy = vy;
