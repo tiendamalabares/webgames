@@ -248,7 +248,8 @@ function addNextPlatform() {
   const lastCol   = last.color || '';
   let color = lastCol;
   while (color === lastCol) color = HOLD_COLS[Math.floor(Math.random() * HOLD_COLS.length)];
-  platforms.push({ x: newCx - w / 2, y: last.y - vertGap, w, h: PLAT_H, dir, color });
+  const shape = Math.floor(Math.random() * 5);
+  platforms.push({ x: newCx - w / 2, y: last.y - vertGap, w, h: PLAT_H, dir, color, shape });
 }
 
 // ─── Reset / init ────────────────────────────────────────────────────────────
@@ -263,7 +264,7 @@ function reset() {
 
   const startW = 180, startX = W / 2 - 90, startY = 1400;
   nextPlatDir = 1;
-  platforms = [{ x: startX, y: startY, w: startW, h: PLAT_H, dir: null }];
+  platforms = [{ x: startX, y: startY, w: startW, h: PLAT_H, dir: null, color: '#b0a898', shape: 0 }];
   addNextPlatform();  // only 1 target visible at a time
 
   // player.y = hand position (grabs platform TOP edge, body hangs below)
@@ -403,6 +404,81 @@ function update(now) {
 }
 
 // ─── Draw helpers ────────────────────────────────────────────────────────────
+// ─── Hold shapes ─────────────────────────────────────────────────────────────
+// Draw a climbing-hold silhouette path. cx/cy = visual centre, w/h = bounds.
+function holdPath(type, cx, cy, w, h) {
+  const hw = w / 2, hh = h / 2;
+  ctx.beginPath();
+  switch (type % 5) {
+    case 0: // Jug — classic curved C-shape
+      ctx.moveTo(cx - hw, cy + hh * 0.15);
+      ctx.bezierCurveTo(cx - hw * 1.05, cy - hh * 1.1, cx + hw * 1.05, cy - hh * 1.1, cx + hw, cy + hh * 0.15);
+      ctx.bezierCurveTo(cx + hw * 0.65, cy + hh, cx - hw * 0.65, cy + hh, cx - hw, cy + hh * 0.15);
+      break;
+    case 1: // Sloper — smooth dome
+      ctx.ellipse(cx, cy - hh * 0.05, hw * 1.05, hh * 0.92, 0, 0, Math.PI * 2);
+      break;
+    case 2: // Crimp — flat rail with shallow depth
+      ctx.moveTo(cx - hw, cy - hh * 0.05);
+      ctx.bezierCurveTo(cx - hw * 1.02, cy - hh * 0.85, cx + hw * 1.02, cy - hh * 0.85, cx + hw, cy - hh * 0.05);
+      ctx.bezierCurveTo(cx + hw * 0.75, cy + hh * 0.85, cx - hw * 0.75, cy + hh * 0.85, cx - hw, cy - hh * 0.05);
+      break;
+    case 3: // Pinch — slightly rotated oval
+      ctx.ellipse(cx, cy, hw * 0.98, hh * 0.88, 0.18, 0, Math.PI * 2);
+      break;
+    case 4: // Volume — irregular triangular bump
+      ctx.moveTo(cx - hw, cy + hh * 0.55);
+      ctx.bezierCurveTo(cx - hw * 1.1, cy - hh * 0.15, cx - hw * 0.15, cy - hh, cx + hw * 0.2, cy - hh);
+      ctx.bezierCurveTo(cx + hw * 0.9, cy - hh * 0.55, cx + hw * 1.1, cy + hh * 0.1, cx + hw, cy + hh * 0.55);
+      ctx.bezierCurveTo(cx + hw * 0.45, cy + hh, cx - hw * 0.45, cy + hh, cx - hw, cy + hh * 0.55);
+      break;
+  }
+  ctx.closePath();
+}
+
+// Deterministic pseudo-random from integer seed
+function seededRand(seed) {
+  const s = ((seed * 1664525 + 1013904223) & 0x7fffffff);
+  return s / 0x7fffffff;
+}
+
+function drawBgHolds() {
+  const ROW_H = 52, COLS = 9;
+  const t     = state === 'intro' ? 0 : cameraY;
+  const firstRow = Math.floor(t / ROW_H) - 1;
+  const lastRow  = Math.ceil((t + H) / ROW_H) + 1;
+
+  for (let row = firstRow; row <= lastRow; row++) {
+    const rowBase = (Math.abs(row) * 6271 + 987654) | 0;
+    const nHolds  = 3 + (Math.abs(rowBase) % 4); // 3–6 per row
+    for (let i = 0; i < nHolds; i++) {
+      const s1 = (seededRand(rowBase + i * 7 + 1) * 0xffffff) | 0;
+      const s2 = (seededRand(rowBase + i * 7 + 2) * 0xffffff) | 0;
+      const s3 = (seededRand(rowBase + i * 7 + 3) * 0xffffff) | 0;
+      const s4 = (seededRand(rowBase + i * 7 + 4) * 0xffffff) | 0;
+
+      const hx   = 14 + seededRand(s1) * (W - 28);
+      const hy   = row * ROW_H + seededRand(s2) * ROW_H;
+      const sy   = hy - t;
+      if (sy < -35 || sy > H + 35) continue;
+
+      const typ  = Math.abs(s3) % 5;
+      const w    = 12 + seededRand(s4) * 24;   // 12–36 px
+      const h    = w * (0.55 + seededRand(s1 ^ s2) * 0.35);
+      const alp  = 0.22 + seededRand(s2 ^ s3) * 0.22;
+
+      // Shadow
+      ctx.fillStyle = `rgba(100,90,75,${alp * 0.5})`;
+      holdPath(typ, hx + 1.5, sy + 2, w, h);
+      ctx.fill();
+      // Hold body
+      ctx.fillStyle = `rgba(165,156,140,${alp})`;
+      holdPath(typ, hx, sy, w, h);
+      ctx.fill();
+    }
+  }
+}
+
 function lighten(hex, amt) {
   const n = parseInt(hex.slice(1), 16);
   const r = Math.min(255, (n >> 16) + amt);
@@ -455,31 +531,39 @@ function drawPlatforms() {
     const isActive = p.dir !== null;
     const isTarget = p === next;
 
-    // Pick colour: active holds are bright, inactive (already grabbed) go grey
-    const holdCol = isActive ? (p.color || '#3a9ad0') : '#b0a898';
+    // Hold colour: active = bright, grabbed = grey
+    const holdCol = isActive ? (p.color || '#3a9ad0') : '#a09888';
+    const shape   = p.shape ?? 0;
+    // Visual hold is taller than the collision box for a 3-D look
+    const drawH = Math.max(p.h * 2.8, 28);
+    const cx    = p.x + p.w / 2;
+    const cy    = sy + p.h * 0.3;  // grip top near p.y, body hangs below
 
-    // Pulse glow on target hold
+    // Pulse glow on target
     if (isTarget && (state === 'idle' || state === 'charging')) {
       const pulse = 0.4 + 0.3 * Math.sin(performance.now() / 400);
       ctx.shadowColor = holdCol;
-      ctx.shadowBlur  = 18 * pulse;
+      ctx.shadowBlur  = 20 * pulse;
     }
 
-    // Drop shadow on wall
+    // Wall shadow (offset blob)
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.beginPath(); ctx.ellipse(p.x + p.w/2 + 3, sy + p.h + 4, p.w/2, 4, 0, 0, Math.PI*2); ctx.fill();
+    holdPath(shape, cx + 2.5, cy + 3, p.w, drawH);
+    ctx.fill();
 
-    // Hold body — rounded rectangle, slightly 3-D with gradient
-    const g = ctx.createLinearGradient(p.x, sy, p.x, sy + p.h);
-    g.addColorStop(0, lighten(holdCol, 30));
-    g.addColorStop(0.5, holdCol);
-    g.addColorStop(1, darken(holdCol, 30));
+    // Hold body gradient
+    const g = ctx.createLinearGradient(cx, cy - drawH / 2, cx, cy + drawH / 2);
+    g.addColorStop(0,   lighten(holdCol, 40));
+    g.addColorStop(0.4, holdCol);
+    g.addColorStop(1,   darken(holdCol, 35));
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.roundRect(p.x, sy, p.w, p.h, 5); ctx.fill();
+    holdPath(shape, cx, cy, p.w, drawH);
+    ctx.fill();
 
-    // Highlight stripe
-    ctx.fillStyle = 'rgba(255,255,255,0.32)';
-    ctx.beginPath(); ctx.roundRect(p.x + 3, sy + 2, p.w - 6, Math.floor(p.h * 0.35), 3); ctx.fill();
+    // Highlight (top sheen)
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    holdPath(shape, cx, cy - drawH * 0.18, p.w * 0.7, drawH * 0.45);
+    ctx.fill();
 
     ctx.shadowBlur = 0;
   }
@@ -920,6 +1004,7 @@ function loop(now) {
   if (sx || sy) ctx.translate(sx, sy);
 
   drawBg();
+  drawBgHolds();
   drawPlatforms();
   drawParticles();
   drawTrajectory();
