@@ -745,139 +745,205 @@ function drawTrajectory() {
 
 function drawPlayer() {
   const cx  = Math.round(player.x + PLAYER_SIZE / 2);
-  const gy  = Math.round(wy(player.y));   // grab point Y on screen
+  const gy  = Math.round(wy(player.y));
   const gd  = player.grabDir || 1;
   const isFlying = state === 'jumping';
 
+  // Palette
+  const SK  = '#f2c89a';
+  const SKD = '#c8885a';
+  const HR  = '#d8b018';
+  const HRD = '#a07810';
+  const BRA = '#d81840';
+  const BRL = '#ff5070';
+  const JNS = '#3a70c0';
+  const JND = '#284e90';
+  const BLT = '#7a5218';
+  const BLC = '#c09038'; // buckle
+  const SHO = '#181018';
+  const SHL = '#3a2840'; // shoe sole highlight
+
   ctx.save();
   ctx.translate(cx, gy);
+  ctx.lineCap  = 'round';
+  ctx.lineJoin = 'round';
 
-  // Each "pixel" = 2×2 screen pixels for pixel-art look
-  const S = 2;
-  function px(x, y, w, h, c) {
-    ctx.fillStyle = c;
-    ctx.fillRect(x * S, y * S, w * S, h * S);
+  function arm(x1, y1, cpx, cpy, x2, y2, thick, col, shadow) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = thick;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(cpx, cpy, x2, y2);
+    ctx.stroke();
+    if (shadow) {
+      ctx.strokeStyle = SKD;
+      ctx.lineWidth   = thick * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(x1 + gd, y1);
+      ctx.quadraticCurveTo(cpx + gd, cpy, x2 + gd, y2);
+      ctx.stroke();
+    }
   }
 
-  // Colour palette (reference: back-view rock climber)
-  const SK  = '#f0c898'; // skin
-  const SKD = '#c89060'; // skin shadow
-  const HR  = '#d8b020'; // blonde hair
-  const HRD = '#a08010'; // hair dark
-  const BRA = '#d82040'; // pink sports bra
-  const BRL = '#f04468'; // bra highlight
-  const JNS = '#3a70b8'; // jeans blue
-  const JND = '#2a5090'; // jeans dark
-  const BLT = '#7a5420'; // harness/belt
-  const BLD = '#4a3010'; // belt buckle dark
-  const SHO = '#181420'; // shoes
-
   if (!isFlying) {
-    // ── Hanging pose (back view, one arm raised to grab point) ──
-    // Arm from grab point (0,0) downward — disappears behind platform top,
-    // emerges at platform bottom (PLAT_H/S = 7 sprite-px below).
-    // gd: +1 = right arm up, -1 = left arm up
-    const armX = gd;          // centre offset of raised arm (sprite px from 0)
-    px(armX-1,  0,  2, 10, SK);    // raised arm (forearm + upper arm)
-    px(armX + (gd > 0 ? 0 : -1), 0, 1, 10, SKD); // arm shadow
+    // ── Hanging pose ──
+    const sx = gd * 3;  // shoulder X of raised arm
 
-    // Hair (visible at shoulder height, back of head)
-    px(-3,  8,  6,  2, HRD);
-    px(-3,  9,  6,  2, HR);
+    // Free arm (behind torso — draw first)
+    const fx = gd > 0 ? -10 : 8;
+    arm(-gd * 5, 46, fx, 60, fx + gd * 2, 78, 7, SK, false);
+    ctx.strokeStyle = SKD; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-gd * 5 - gd, 46);
+    ctx.quadraticCurveTo(fx - gd, 60, fx + gd * 2 - gd, 78);
+    ctx.stroke();
+    // hand dot
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.arc(fx + gd * 2, 79, 4, 0, Math.PI * 2); ctx.fill();
 
-    // Head (back view — no face, just rounded shape + hair)
-    px(-3, 11,  6,  5, SK);
-    px(-3, 11,  1,  5, SKD);
-    px( 2, 11,  1,  5, SKD);
-
-    // Neck
-    px(-1, 16,  2,  2, SK);
-
-    // Torso — pink sports bra, back view with cross straps
-    px(-4, 18,  8, 10, BRA);
-    px(-4, 18,  1, 10, '#9a0020');  // left shadow
-    px( 3, 18,  1, 10, '#9a0020');  // right shadow
-    px(-1, 18,  1,  5, BRL);        // cross strap L
-    px( 0, 18,  1,  5, BRL);        // cross strap R
-    px(-3, 24,  6,  4, '#b01030');  // lower back
-
-    // Free arm (hanging down, opposite side)
-    const hx = gd > 0 ? -6 : 4;
-    px(hx,    18,  2,  7, SK);   // upper arm
-    px(hx,    18,  1,  7, SKD);
-    px(hx+1,  25,  2,  7, SK);   // forearm
-    px(hx+1,  25,  1,  7, SKD);
-
-    // Harness / belt
-    px(-5, 28, 10,  2, BLT);
-    px(-4, 30,  8,  1, BLD);
-    px(-5, 28,  2,  2, BLD);    // left clip
-    px( 3, 28,  2,  2, BLD);    // right clip
-
-    // Legs — 3/4 capri jeans
-    px(-5, 31,  4, 12, JNS);
-    px( 1, 31,  4, 12, JNS);
-    px(-5, 31,  1, 12, JND);    // outer shadow L
-    px(-2, 31,  1, 12, JND);    // inner gap
-    px( 1, 31,  1, 12, JND);    // inner gap
-    px( 4, 31,  1, 12, JND);    // outer shadow R
-
-    // Shoes (dark climbing shoes)
-    px(-6, 43,  5,  2, SHO);
-    px( 1, 43,  5,  2, SHO);
-    px(-5, 45,  3,  1, SHO);
-    px( 2, 45,  3,  1, SHO);
-
-  } else {
-    // ── Flying pose (launched, body slightly rotated by velocity) ──
-    const angle = Math.atan2(player.vy, player.vx) * 0.35;
-    // Pivot around body centre (~18 sp below grab point)
-    ctx.translate(0, 18 * S);
-    ctx.rotate(angle);
-
-    // Head
-    px(-3, -16,  6,  2, HRD);  // hair dark
-    px(-3, -14,  6,  2, HR);   // hair
-    px(-3, -12,  6,  5, SK);   // head
-    px(-3, -12,  1,  5, SKD);
-    px( 2, -12,  1,  5, SKD);
-
-    // Neck
-    px(-1,  -7,  2,  2, SK);
-
-    // Torso
-    px(-4,  -5,  8,  9, BRA);
-    px(-4,  -5,  1,  9, '#9a0020');
-    px( 3,  -5,  1,  9, '#9a0020');
-    px(-1,  -5,  2,  4, BRL);
-
-    // Belt
-    px(-5,   4, 10,  2, BLT);
-
-    // Legs (slightly trailing behind body when flying)
-    px(-5,   6,  4, 11, JNS);
-    px( 1,   6,  4, 11, JNS);
-    px(-5,   6,  1, 11, JND);
-    px(-2,   6,  1, 11, JND);
-    px( 1,   6,  1, 11, JND);
-    px( 4,   6,  1, 11, JND);
+    // Legs
+    // Left
+    ctx.fillStyle = JNS;
+    ctx.beginPath();
+    ctx.moveTo(-10, 68); ctx.lineTo(-3, 68);
+    ctx.lineTo(-4, 96);  ctx.lineTo(-11, 96);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = JND;
+    ctx.fillRect(-11, 68, 3, 28);
+    ctx.fillRect(-5, 68, 2, 28);
+    // Right
+    ctx.fillStyle = JNS;
+    ctx.beginPath();
+    ctx.moveTo(3, 68); ctx.lineTo(10, 68);
+    ctx.lineTo(11, 96); ctx.lineTo(4, 96);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = JND;
+    ctx.fillRect(8, 68, 3, 28);
+    ctx.fillRect(3, 68, 2, 28);
 
     // Shoes
-    px(-6,  17,  5,  2, SHO);
-    px( 1,  17,  5,  2, SHO);
+    ctx.fillStyle = SHO;
+    ctx.beginPath(); ctx.ellipse(-7, 97, 7, 4, -0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, 97, 7, 4, 0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = SHL;
+    ctx.beginPath(); ctx.ellipse(-7, 96, 5, 2, -0.15, 0, Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, 96, 5, 2, 0.15, 0, Math.PI); ctx.fill();
 
-    // Arms drawn in screen-space (un-rotate) so they point in real directions
+    // Belt / harness
+    ctx.fillStyle = BLT;
+    ctx.beginPath(); ctx.roundRect(-11, 63, 22, 6, 3); ctx.fill();
+    ctx.fillStyle = BLC;
+    ctx.beginPath(); ctx.roundRect(-11, 63, 5, 6, [3,0,0,3]); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(6, 63, 5, 6, [0,3,3,0]); ctx.fill();
+
+    // Torso (sports bra back)
+    ctx.fillStyle = BRA;
+    ctx.beginPath(); ctx.roundRect(-10, 44, 20, 20, [3,3,0,0]); ctx.fill();
+    // Lower band
+    ctx.fillStyle = '#900020';
+    ctx.beginPath(); ctx.roundRect(-10, 60, 20, 4, [0,0,2,2]); ctx.fill();
+    // Cross straps
+    ctx.strokeStyle = BRL; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-7, 44); ctx.lineTo(3, 61); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(7, 44); ctx.lineTo(-3, 61); ctx.stroke();
+    // Side shadows
+    ctx.fillStyle = '#9a0018';
+    ctx.fillRect(-10, 44, 3, 20);
+    ctx.fillRect(7, 44, 3, 20);
+
+    // Neck
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.roundRect(-4, 38, 8, 8, 3); ctx.fill();
+
+    // Head (back view)
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.ellipse(0, 30, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = SKD;
+    ctx.fillRect(-10, 26, 3, 12); // left shadow
+
+    // Hair
+    ctx.fillStyle = HRD;
+    ctx.beginPath(); ctx.ellipse(0, 22, 10, 7, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = HR;
+    ctx.beginPath(); ctx.ellipse(0, 23, 9, 5, 0, Math.PI, 0); ctx.fill();
+    // Hair strand / pony hint
+    ctx.strokeStyle = HR; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(6, 26); ctx.quadraticCurveTo(12, 30, 9, 38); ctx.stroke();
+
+    // Raised arm (on top of everything)
+    arm(sx, 22, sx * 0.7, 12, 0, 1, 7, SK, true);
+    // Grip hand
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.arc(0, 1, 4.5, 0, Math.PI * 2); ctx.fill();
+
+  } else {
+    // ── Flying pose ──
+    const angle = Math.atan2(player.vy, player.vx) * 0.30;
+    ctx.translate(0, 36);
+    ctx.rotate(angle);
+
+    // Free/trailing arm (behind torso)
+    const tx = gd > 0 ? -10 : 8;
+    arm(gd > 0 ? -7 : 5, -8, tx, 4, tx + 2, 18, 7, SK, false);
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.arc(tx + 2, 19, 4, 0, Math.PI * 2); ctx.fill();
+
+    // Legs (trailing slightly)
+    ctx.fillStyle = JNS;
+    ctx.beginPath();
+    ctx.moveTo(-10, 8); ctx.lineTo(-3, 8); ctx.lineTo(-4, 34); ctx.lineTo(-11, 34);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = JND; ctx.fillRect(-11, 8, 3, 26); ctx.fillRect(-5, 8, 2, 26);
+    ctx.fillStyle = JNS;
+    ctx.beginPath();
+    ctx.moveTo(3, 8); ctx.lineTo(10, 8); ctx.lineTo(11, 34); ctx.lineTo(4, 34);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = JND; ctx.fillRect(8, 8, 3, 26); ctx.fillRect(3, 8, 2, 26);
+
+    // Shoes
+    ctx.fillStyle = SHO;
+    ctx.beginPath(); ctx.ellipse(-7, 35, 7, 4, -0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, 35, 7, 4, 0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = SHL;
+    ctx.beginPath(); ctx.ellipse(-7, 34, 5, 2, -0.15, 0, Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, 34, 5, 2, 0.15, 0, Math.PI); ctx.fill();
+
+    // Belt
+    ctx.fillStyle = BLT;
+    ctx.beginPath(); ctx.roundRect(-11, 3, 22, 6, 3); ctx.fill();
+
+    // Torso
+    ctx.fillStyle = BRA;
+    ctx.beginPath(); ctx.roundRect(-10, -16, 20, 20, 3); ctx.fill();
+    ctx.fillStyle = '#900020';
+    ctx.beginPath(); ctx.roundRect(-10, 1, 20, 4, [0,0,2,2]); ctx.fill();
+    ctx.strokeStyle = BRL; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-7, -16); ctx.lineTo(3, 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(7, -16); ctx.lineTo(-3, 1); ctx.stroke();
+    ctx.fillStyle = '#9a0018';
+    ctx.fillRect(-10, -16, 3, 20); ctx.fillRect(7, -16, 3, 20);
+
+    // Neck
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.roundRect(-4, -24, 8, 9, 3); ctx.fill();
+
+    // Head
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.ellipse(0, -33, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = SKD; ctx.fillRect(-10, -37, 3, 12);
+    ctx.fillStyle = HRD;
+    ctx.beginPath(); ctx.ellipse(0, -40, 10, 6, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = HR;
+    ctx.beginPath(); ctx.ellipse(0, -39, 9, 4, 0, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = HR; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(6, -37); ctx.quadraticCurveTo(12, -32, 9, -22); ctx.stroke();
+
+    // Reaching arm (screen-space — un-rotate body then draw arm)
     ctx.rotate(-angle);
-    // Reaching arm (toward next platform — upward)
-    const ax = gd;
-    px(ax*3-1, -28,  2, 12, SK);
-    px(ax*3 + (gd > 0 ? 0 : -1), -28, 1, 12, SKD);
-    // Trailing / released arm
-    const tx = gd > 0 ? -7 : 5;
-    px(tx,    -5,  2,  8, SK);
-    px(tx,    -5,  1,  8, SKD);
-    px(tx+1,   3,  2,  6, SK);
-    px(tx+1,   3,  1,  6, SKD);
+    const ax = gd * 5;
+    arm(gd * 5, -16, ax * 1.3, -30, ax * 1.6, -46, 7, SK, true);
+    ctx.fillStyle = SK;
+    ctx.beginPath(); ctx.arc(ax * 1.6, -47, 4.5, 0, Math.PI * 2); ctx.fill();
   }
 
   ctx.restore();
@@ -1079,7 +1145,7 @@ function drawIntro(now) {
   ctx.font      = '12px "Space Grotesk", monospace';
   ctx.textAlign    = 'right';
   ctx.textBaseline = 'top';
-  ctx.fillText('v1.7', W - 10, 10);
+  ctx.fillText('v1.8', W - 10, 10);
   ctx.restore();
 
   // Press to start
